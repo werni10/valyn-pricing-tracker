@@ -765,7 +765,7 @@ function solveRemiseFromTTC(pvpTTC, options, fi, type, targetTTC){
 
 /* ================= REAL DATA (from Document Excel Auto Najma.xlsx) ================= */
 // Client = Auto Nejma, tracked = Audi finitions. months: {showroom, remise?} or {showroom, cemObs}
-const VEHICLES = [
+let VEHICLES = [
   { id:'a3-emotion', marque:'AUDI', modele:'A3 Sportback', motor:'2.0 TDI', finition:'EMOTION',
     segment:'Compactes Hatchback', type:'Thermique', fi:7105, catalogue:438000, role:'client',
     comment:'Très bonne remise sur la 1ère finition A3. Prix remisé encore en juin vs M-1.',
