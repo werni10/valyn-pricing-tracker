@@ -6,7 +6,7 @@
 // Safe to commit: the anon key is a public client key protected by RLS.
 // =====================================================================
 window.VALYN_CONFIG = {
-  supabaseUrl: "",        // e.g. "https://xxxxxxxx.supabase.co"
-  supabaseAnonKey: "",    // e.g. "eyJhbGciOi..."
+  supabaseUrl: "https://uhayryaabydwgpsjdvfu.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVoYXlyeWFhYnlkd2dwc2pkdmZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxNTI2OTgsImV4cCI6MjA5OTcyODY5OH0.dnyXjQ-9YDUDYf2MfscThBBWqRhKJn4HQgWnpdlk8ZQ",
   org: "Auto Nejma"       // client organisation this deployment serves
 };
