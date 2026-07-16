@@ -1388,9 +1388,11 @@ function renderLogin(){
 async function liveLogin(){
   const email=document.getElementById('liEmail').value.trim(), pass=document.getElementById('liPass').value;
   const err=document.getElementById('liErr'); err.innerText='Connexion…';
-  const {data,error}=await Store.signIn(email,pass);
-  if(error){ err.innerText=error.message; return; }
-  await enterLive(data.user);
+  try{
+    const {data,error}=await Store.signIn(email,pass);
+    if(error){ err.innerText=error.message; return; }
+    await enterLive(data.user);
+  }catch(e){ err.innerText='Erreur: '+(e&&e.message?e.message:String(e)); console.error(e); }
 }
 async function enterLive(user){
   await Store.hydrate(user.id);
