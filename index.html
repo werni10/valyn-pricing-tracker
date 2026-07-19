@@ -279,12 +279,22 @@
       <button class="nav-link" data-page="collection" data-cap="collection"><span class="ico">◎</span>Collecte & preuves</button>
       <button class="nav-link" data-page="quality" data-cap="quality"><span class="ico">✓</span>Contrôle qualité</button>
     </div>
+    <div class="nav-block">
+      <div class="nav-title">Compte & support</div>
+      <button class="nav-link" data-page="contact" data-cap="contact"><span class="ico">✉</span>Contacter Valyn</button>
+      <button class="nav-link" data-page="settings" data-cap="settings"><span class="ico">⚙</span>Paramètres</button>
+    </div>
     <div class="nav-block" id="adminBlock">
       <div class="nav-title">Administration Valyn</div>
+      <button class="nav-link" data-page="vdash" data-cap="vdash" data-admin="1"><span class="ico">⌁</span>Dashboard Valyn</button>
+      <button class="nav-link" data-page="master" data-cap="master" data-admin="1"><span class="ico">◌</span>Master Data</button>
       <button class="nav-link" data-page="dataadmin" data-cap="dataadmin" data-admin="1"><span class="ico">⬆</span>Import données (xlsx) <span class="badge">Admin</span></button>
+      <button class="nav-link" data-page="control" data-cap="control" data-admin="1"><span class="ico">✓</span>Analyse & contrôle</button>
+      <button class="nav-link" data-page="coherence" data-cap="coherence" data-admin="1"><span class="ico">≋</span>Cohérence intermensuelle</button>
+      <button class="nav-link" data-page="pilotage" data-cap="pilotage" data-admin="1"><span class="ico">◈</span>Pilotage mensuel</button>
+      <button class="nav-link" data-page="docs" data-cap="docs" data-admin="1"><span class="ico">□</span>Bibliothèque de preuves</button>
       <button class="nav-link" data-page="diffusion" data-cap="diffusion" data-admin="1"><span class="ico">✉</span>Diffusion & alertes</button>
       <button class="nav-link" data-page="users" data-cap="users" data-admin="1"><span class="ico">◐</span>Accès & droits</button>
-      <button class="nav-link" data-page="pilotage" data-cap="pilotage" data-admin="1"><span class="ico">◈</span>Pilotage mensuel</button>
     </div>
     <div class="sidebar-card">
       <strong>Cycle de publication</strong>
@@ -493,6 +503,50 @@
       </div>
     </section>
 
+    <!-- CONTACT -->
+    <section class="page" id="contact">
+      <div class="grid two-even">
+        <div class="card">
+          <div class="section-head"><div><h3>Contacter Valyn Advisory</h3><p>Support fonctionnel, support analyste, demande urgente de modification dans la fenêtre de 24 h.</p></div></div>
+          <label class="fl">Sujet</label>
+          <input class="field" style="width:100%;margin-bottom:10px" id="ctSubject" placeholder="ex. Question analyse Juin 2026">
+          <div class="grid two-even" style="gap:10px;margin-bottom:10px">
+            <div><label class="fl">Mois concerné</label><select class="field" style="width:100%" id="ctPeriod"></select></div>
+            <div><label class="fl">Finition concernée (optionnel)</label><input class="field" style="width:100%" id="ctFinition" placeholder="ex. Audi Q5 2.0 S-Line"></div>
+          </div>
+          <label class="fl">Message</label>
+          <textarea class="field" style="width:100%;height:120px;resize:vertical" id="ctMessage" placeholder="Votre message..."></textarea>
+          <button class="btn btn-primary" style="margin-top:12px" onclick="sendTicket()">Envoyer la demande</button>
+        </div>
+        <div class="card">
+          <div class="section-head"><div><h3>Historique des demandes</h3><p>Vos tickets envoyés à Valyn.</p></div></div>
+          <div class="alert-stack" id="ticketList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="page" id="settings">
+      <div class="grid two-even">
+        <div class="card">
+          <div class="section-head"><div><h3>Compte</h3><p>Informations de votre profil.</p></div></div>
+          <label class="fl">Nom</label>
+          <input class="field" style="width:100%;margin-bottom:10px" id="stName">
+          <label class="fl">E-mail</label>
+          <input class="field" style="width:100%;margin-bottom:10px" id="stEmail" disabled>
+          <label class="fl">Organisation</label>
+          <input class="field" style="width:100%" id="stOrg" disabled>
+        </div>
+        <div class="card">
+          <div class="section-head"><div><h3>Notifications</h3><p>Préférences d'alerte par e-mail et dans l'application.</p></div></div>
+          <p><label style="font-size:13px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="stnSel" checked> Rappel sélection M+1</label></p>
+          <p><label style="font-size:13px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="stnPub" checked> Rapport publié</label></p>
+          <p><label style="font-size:13px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="stnAlert" checked> Nouvelle alerte flash</label></p>
+          <button class="btn btn-primary" style="margin-top:12px" onclick="saveSettings()">Enregistrer</button>
+        </div>
+      </div>
+    </section>
+
     <!-- SIM CEM -->
     <section class="page" id="simcem">
       <div class="card">
@@ -643,6 +697,58 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
       </div>
     </section>
 
+    <!-- DASHBOARD VALYN (ops) -->
+    <section class="page" id="vdash">
+      <div class="grid kpi-grid" id="vdashKpiRow"></div>
+      <div class="grid two-even" style="margin-top:18px">
+        <div class="card">
+          <div class="section-head"><div><h3>Volume par mois</h3><p>Finitions publiées, tous statuts confondus.</p></div></div>
+          <div id="vdashVolume"></div>
+        </div>
+        <div class="card">
+          <div class="section-head"><div><h3>Répartition par marque</h3><p>Finitions suivies ce mois, par marque.</p></div></div>
+          <div id="vdashBrand"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MASTER DATA (Valyn) -->
+    <section class="page" id="master">
+      <div class="grid two-col">
+        <div class="card">
+          <div class="section-head"><div><h3>Référentiel véhicules</h3><p>Marques, modèles, finitions, motorisations et segments suivis.</p></div></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Marque</th><th>Modèle</th><th>Finition</th><th>Motorisation</th><th>Segment</th><th>Rôle</th><th>Statut</th><th></th></tr></thead>
+              <tbody id="masterBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-head"><div><h3>Ajouter une finition</h3><p>Créée directement dans le référentiel, disponible pour la prochaine sélection.</p></div></div>
+          <label class="fl">Marque</label>
+          <input class="field" style="width:100%;margin-bottom:10px" id="mMarque" placeholder="AUDI">
+          <label class="fl">Modèle</label>
+          <input class="field" style="width:100%;margin-bottom:10px" id="mModele" placeholder="Q5">
+          <div class="grid two-even" style="gap:10px;margin-bottom:10px">
+            <div><label class="fl">Motorisation</label><input class="field" style="width:100%" id="mMotor" placeholder="2.0 TDI"></div>
+            <div><label class="fl">Finition</label><input class="field" style="width:100%" id="mFinition" placeholder="S-LINE"></div>
+          </div>
+          <div class="grid two-even" style="gap:10px;margin-bottom:10px">
+            <div><label class="fl">Segment</label><input class="field" style="width:100%" id="mSegment" placeholder="Midsize SUV"></div>
+            <div><label class="fl">Type</label>
+              <select class="field" style="width:100%" id="mType"><option>Thermique</option><option>Électrique</option><option>Hybride rechargeable</option></select>
+            </div>
+          </div>
+          <div class="grid two-even" style="gap:10px;margin-bottom:10px">
+            <div><label class="fl">Prix catalogue</label><input class="field" style="width:100%" id="mCatalogue" placeholder="778000"></div>
+            <div><label class="fl">Frais immat.</label><input class="field" style="width:100%" id="mFi" value="7105"></div>
+          </div>
+          <button class="btn btn-primary" onclick="addMasterVehicle()">+ Ajouter au référentiel</button>
+        </div>
+      </div>
+    </section>
+
     <!-- DATA ADMIN (Valyn) -->
     <section class="page" id="dataadmin">
       <div class="grid two-col">
@@ -671,6 +777,37 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
             <strong>Workflow Valyn :</strong> import fichier → contrôle qualité automatique → publication → le client reçoit une notification et le dashboard à jour. Un import remplace les données du mois courant pour les finitions correspondantes.
           </div>
           <button class="btn btn-ghost" style="margin-top:12px" onclick="resetData()">↺ Réinitialiser aux données d'origine</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONTROL (Valyn) -->
+    <section class="page" id="control">
+      <div class="card">
+        <div class="section-head">
+          <div><h3>Analyse & contrôle — <span id="ctrlPeriod">Juin 2026</span></h3><p>Toutes les variables calculées, comparées au mois précédent, avant passage en publication.</p></div>
+          <span class="right-note" id="ctrlCount"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Finition</th><th>Statut</th><th class="num">Catalogue TTC</th><th class="num">Showroom TTC</th><th class="num">Showroom HT</th><th class="num">Remise %</th><th class="num">Remise TTC</th><th class="num">Remisé HT</th><th class="num">Taxe luxe %</th><th class="num">Taxe luxe valeur</th><th class="num">CEM</th><th class="num">M-1 CEM</th><th class="num">Remise fiscale</th><th class="num">Remise commerciale</th><th class="num">Indice</th></tr></thead>
+            <tbody id="controlBody"></tbody>
+          </table>
+        </div>
+        <button class="btn btn-success" style="margin-top:14px" onclick="validateControl()">✓ Valider le contrôle</button>
+      </div>
+    </section>
+
+    <!-- COHERENCE (Valyn) -->
+    <section class="page" id="coherence">
+      <div class="grid three-col" id="coherenceKpis"></div>
+      <div class="card" style="margin-top:17px">
+        <div class="section-head"><div><h3>Matrice de variations</h3><p>Écarts CEM entre le mois courant et M-1, au-delà du seuil de 3 %.</p></div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Finition</th><th>Variable</th><th class="num">M-1</th><th class="num">M</th><th class="num">Variation</th><th>Statut</th><th>Commentaire</th></tr></thead>
+            <tbody id="coherenceBody"></tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -710,6 +847,22 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
       <div class="card">
         <div class="section-head"><div><h3>Cycle mensuel</h3><p>Chaque mois avance de la sélection client à la publication. La transmission au client n'est possible qu'une fois toutes les étapes validées.</p></div></div>
         <div id="pilotageList"></div>
+      </div>
+    </section>
+
+    <!-- DOCS (Valyn) -->
+    <section class="page" id="docs">
+      <div class="card">
+        <div class="section-head"><div><h3>Bibliothèque de preuves</h3><p>Catalogues, proformas et justificatifs collectés pour la publication en cours.</p></div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Mois</th><th>Finition</th><th>Type</th><th>Fichier</th><th>Statut</th><th>Visibilité</th></tr></thead>
+            <tbody id="docsBody"></tbody>
+          </table>
+        </div>
+        <div class="empty-note" style="text-align:left;margin-top:14px">
+          Le stockage de fichiers n'est pas encore branché (voir <strong>Collecte & preuves</strong>). Cette page reflète les commentaires et justificatifs déjà saisis sur chaque finition.
+        </div>
       </div>
     </section>
   </main>
@@ -1314,7 +1467,17 @@ const PAGES={
   collection:["Collecte & preuves","Saisie terrain — ajoute une observation recalculée au tracker."],
   quality:["Contrôle qualité","Cohérence CEM, paliers fiscaux et anomalies avant publication."],
   selection:["Sélection analyse M+1","Choisissez les finitions à analyser le mois prochain et transmettez la sélection à Valyn."],
-  pilotage:["Pilotage mensuel","Suivi des étapes du cycle mensuel et transmission de l'analyse au client."]
+  contact:["Contacter Valyn","Support fonctionnel et métier — envoyez une demande liée à un mois ou une finition."],
+  settings:["Paramètres","Gestion du compte et des préférences de notification."],
+  pilotage:["Pilotage mensuel","Suivi des étapes du cycle mensuel et transmission de l'analyse au client."],
+  vdash:["Dashboard Valyn","Pilotage opérationnel des rapports, volumes, délais et alertes."],
+  master:["Master Data automobile","Référentiel marques, modèles, finitions, motorisations et segments."],
+  control:["Analyse & contrôle","Revue détaillée M / M-1 de toutes les variables calculées avant publication."],
+  coherence:["Cohérence intermensuelle","Variations inhabituelles entre le mois courant et les données antérieures."],
+  docs:["Bibliothèque de preuves","Gestion centralisée des catalogues et justificatifs collectés."],
+  dataadmin:["Import données mensuelles","Chargez le fichier collecte du mois. Le moteur recalcule tout et publie au client."],
+  diffusion:["Diffusion & alertes","Composez et envoyez une alerte ou un message à Auto Nejma."],
+  users:["Accès & droits","Gérez les comptes Auto Nejma et les modules accessibles à chacun."]
 };
 document.querySelectorAll(".nav-link").forEach(btn=>{
   btn.addEventListener("click",()=>{
@@ -1335,9 +1498,9 @@ function showToast(msg){ const t=document.getElementById("toast"); t.innerText=m
 function runAnalysis(){ renderAll(); showToast("Analyse recalculée : KPI, alertes, benchmark et exports à jour"); document.querySelectorAll(".kpi .value").forEach(k=>k.animate([{transform:"scale(1)"},{transform:"scale(1.06)"},{transform:"scale(1)"}],{duration:500})); }
 
 /* ================= AUTH / ACCOUNTS / RIGHTS ================= */
-const CLIENT_CAPS=['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','engine','catalog','collection','quality','selection'];
-const ADMIN_CAPS=['dataadmin','diffusion','users','pilotage'];
-const CAP_LABEL={dashboard:'Dashboard',tracked:'Finitions trackées',history:'Analyse historique',compare:'Comparatif M/M-1',priceindex:'Price Index',benchmark:'Benchmark',reports:'Rapports & exports',simcem:'Simulateur CEM',simremise:'Simulateur remise',engine:'Moteur d\'analyse',catalog:'Catalogue',collection:'Collecte & preuves',quality:'Contrôle qualité',selection:'Sélection M+1',dataadmin:'Import données',diffusion:'Diffusion & alertes',users:'Accès & droits',pilotage:'Pilotage mensuel'};
+const CLIENT_CAPS=['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','engine','catalog','collection','quality','selection','contact','settings'];
+const ADMIN_CAPS=['dataadmin','diffusion','users','pilotage','vdash','master','control','coherence','docs'];
+const CAP_LABEL={dashboard:'Dashboard',tracked:'Finitions trackées',history:'Analyse historique',compare:'Comparatif M/M-1',priceindex:'Price Index',benchmark:'Benchmark',reports:'Rapports & exports',simcem:'Simulateur CEM',simremise:'Simulateur remise',engine:'Moteur d\'analyse',catalog:'Catalogue',collection:'Collecte & preuves',quality:'Contrôle qualité',selection:'Sélection M+1',contact:'Contacter Valyn',settings:'Paramètres',dataadmin:'Import données',diffusion:'Diffusion & alertes',users:'Accès & droits',pilotage:'Pilotage mensuel',vdash:'Dashboard Valyn',master:'Master Data',control:'Analyse & contrôle',coherence:'Cohérence intermensuelle',docs:'Bibliothèque de preuves'};
 const AV_COLORS={admin:'linear-gradient(135deg,#f47b20,#ff9a4d)',client:'linear-gradient(135deg,#111827,#374151)'};
 function initials(n){return (n.replace(/[^\p{L}\s]/gu,'').trim().split(/\s+/).map(w=>w[0]).filter(Boolean).slice(0,2).join('')||'?').toUpperCase();}
 function grant(list){const r={};CLIENT_CAPS.concat(ADMIN_CAPS).forEach(c=>r[c]=false);list.forEach(c=>r[c]=true);return r;}
@@ -1345,11 +1508,11 @@ function allTrue(){return grant(CLIENT_CAPS.concat(ADMIN_CAPS));}
 
 const DEFAULT_ACCOUNTS=[
   {id:'valyn-admin',name:'Sofia Bennani',org:'Valyn Advisory',role:'admin',email:'analyst@valyn.ma',active:true,rights:allTrue()},
-  {id:'an-dg',name:'Direction Générale',org:'Auto Nejma',role:'client',email:'dg@autonejma.ma',active:true,rights:grant(['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','selection'])},
-  {id:'an-pricing',name:'Pricing Manager',org:'Auto Nejma',role:'client',email:'pricing@autonejma.ma',active:true,rights:grant(['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','catalog','collection','quality','selection'])},
-  {id:'an-mkt',name:'Marketing (lecture)',org:'Auto Nejma',role:'client',email:'marketing@autonejma.ma',active:true,rights:grant(['dashboard','tracked','reports'])}
+  {id:'an-dg',name:'Direction Générale',org:'Auto Nejma',role:'client',email:'dg@autonejma.ma',active:true,rights:grant(['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','selection','contact','settings'])},
+  {id:'an-pricing',name:'Pricing Manager',org:'Auto Nejma',role:'client',email:'pricing@autonejma.ma',active:true,rights:grant(['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','catalog','collection','quality','selection','contact','settings'])},
+  {id:'an-mkt',name:'Marketing (lecture)',org:'Auto Nejma',role:'client',email:'marketing@autonejma.ma',active:true,rights:grant(['dashboard','tracked','reports','contact'])}
 ];
-const LS={acc:'valyn_accounts',sess:'valyn_session',br:'valyn_broadcasts',reads:'valyn_reads',upload:'valyn_upload',uploadMeta:'valyn_upload_meta',cycle:'valyn_cycle',sel:'valyn_selections'};
+const LS={acc:'valyn_accounts',sess:'valyn_session',br:'valyn_broadcasts',reads:'valyn_reads',upload:'valyn_upload',uploadMeta:'valyn_upload_meta',cycle:'valyn_cycle',sel:'valyn_selections',tickets:'valyn_tickets',cohnotes:'valyn_coh_notes',notif:'valyn_notifprefs_'};
 function load(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
 
@@ -1414,6 +1577,13 @@ const Store = {
     if(!this.sb)return;
     await this.sb.from('selections').delete().eq('month_id',monthId);
     if(vehicleIds.length) await this.sb.from('selections').insert(vehicleIds.map(vid=>({month_id:monthId,vehicle_id:vid})));
+  },
+  async upsertVehicle(v){
+    if(!this.sb)return null;
+    const {data}=await this.sb.from('vehicles').upsert(
+      {org:this.org,marque:v.marque,modele:v.modele,motor:v.motor,finition:v.finition,segment:v.segment,type:v.type,fi:v.fi,catalogue:v.catalogue,vrole:v.role,comment:v.comment||'',status_override:v.statutOverride||null},
+      {onConflict:'org,marque,modele,finition'}).select().single();
+    return data;
   }
 };
 
@@ -1801,6 +1971,160 @@ async function advanceStatus(period,newStatus){
   renderPilotage();
 }
 
+/* ================= CONTACT / SETTINGS (client) ================= */
+let TICKETS=load(LS.tickets,[]);
+function saveTickets(){save(LS.tickets,TICKETS);}
+function fillContactPeriods(){
+  const sel=document.getElementById('ctPeriod'); if(!sel) return;
+  const periods=MONTHS.concat([nextPeriod(CURRENT)]).slice().reverse();
+  sel.innerHTML=periods.map(p=>`<option value="${p}">${MLABEL[p]||p}</option>`).join('');
+}
+function sendTicket(){
+  const subject=document.getElementById('ctSubject').value.trim();
+  const message=document.getElementById('ctMessage').value.trim();
+  if(!subject||!message) return showToast('Renseignez le sujet et le message');
+  const period=document.getElementById('ctPeriod').value;
+  const finition=document.getElementById('ctFinition').value.trim();
+  const acc=currentAccount();
+  TICKETS.unshift({id:'tk'+Date.now(),author:acc.name,subject,message,period,finition,createdAt:new Date().toISOString()});
+  saveTickets();
+  document.getElementById('ctSubject').value=''; document.getElementById('ctMessage').value=''; document.getElementById('ctFinition').value='';
+  showToast('Demande envoyée à Valyn');
+  renderTickets();
+}
+function renderTickets(){
+  const el=document.getElementById('ticketList'); if(!el) return;
+  fillContactPeriods();
+  const acc=currentAccount();
+  const mine=TICKETS.filter(t=>acc&&t.author===acc.name);
+  el.innerHTML=mine.length?mine.map(t=>`<div class="alert"><div class="alert-ico">✉</div><div><h4>${t.subject}</h4><p>${t.message}</p><small>${MLABEL[t.period]||t.period}${t.finition?' · '+t.finition:''} · ${new Date(t.createdAt).toLocaleDateString('fr-FR')}</small></div></div>`).join(''):'<div class="empty-note">Aucune demande envoyée.</div>';
+}
+function renderSettings(){
+  const acc=currentAccount(); if(!acc) return;
+  const n=document.getElementById('stName'); if(!n) return;
+  n.value=acc.name; document.getElementById('stEmail').value=acc.email||''; document.getElementById('stOrg').value=acc.org;
+  const prefs=load(LS.notif+acc.id,{sel:true,pub:true,alert:true});
+  document.getElementById('stnSel').checked=prefs.sel; document.getElementById('stnPub').checked=prefs.pub; document.getElementById('stnAlert').checked=prefs.alert;
+}
+function saveSettings(){
+  const acc=currentAccount(); if(!acc) return;
+  save(LS.notif+acc.id,{sel:document.getElementById('stnSel').checked,pub:document.getElementById('stnPub').checked,alert:document.getElementById('stnAlert').checked});
+  showToast('Paramètres enregistrés');
+}
+
+/* ================= DASHBOARD VALYN (ops) ================= */
+function renderVdash(){
+  const kEl=document.getElementById('vdashKpiRow'); if(!kEl) return;
+  const org=CFG.org||'Auto Nejma';
+  const published=CYCLE.filter(m=>m.org===org&&m.status==='PUBLISHED').length;
+  const sc=scope(CURRENT);
+  const alerts=buildAlerts();
+  const noHist=sc.filter(v=>!vehMonth(v,PREV)).length;
+  kEl.innerHTML=[
+    {lab:'Rapports produits',val:published},
+    {lab:'Références analysées',val:sc.length},
+    {lab:'Finitions sans historique',val:noHist},
+    {lab:'Alertes flash',val:alerts.length}
+  ].map(k=>`<div class="card kpi"><div class="label">${k.lab}</div><div class="value">${k.val}</div></div>`).join('');
+  const vol=MONTHS.map(p=>({p,n:VEHICLES.filter(v=>v.months[p]).length}));
+  const maxVol=Math.max(...vol.map(x=>x.n),1);
+  document.getElementById('vdashVolume').innerHTML=vol.map(x=>{
+    const w=Math.max(6,x.n/maxVol*100);
+    return `<div class="bar-row"><label>${MLABEL[x.p]||x.p}</label><div class="bar-bg"><div class="bar-fill" style="width:${w}%"></div></div><b>${x.n}</b></div>`;
+  }).join('');
+  const byBrand={}; sc.forEach(v=>byBrand[v.marque]=(byBrand[v.marque]||0)+1);
+  const maxB=Math.max(...Object.values(byBrand),1);
+  document.getElementById('vdashBrand').innerHTML=Object.entries(byBrand).map(([b,n])=>{
+    const w=Math.max(6,n/maxB*100);
+    return `<div class="bar-row"><label>${b}</label><div class="bar-bg"><div class="bar-fill" style="width:${w}%"></div></div><b>${n}</b></div>`;
+  }).join('');
+}
+
+/* ================= MASTER DATA (Valyn) ================= */
+function renderMaster(){
+  const el=document.getElementById('masterBody'); if(!el) return;
+  el.innerHTML=VEHICLES.map(v=>{
+    const active=v.statutOverride!=='Arrêtée';
+    return `<tr><td>${v.marque}</td><td>${v.modele}</td><td>${v.finition}</td><td>${v.motor}</td><td><span class="chip chip-seg">${v.segment}</span></td><td>${v.role==='catalog'?'Référence':'Suivi client'}</td><td>${active?'<span class="chip chip-ok">Actif</span>':'<span class="chip chip-muted">Inactif</span>'}</td><td><button class="btn btn-light" onclick="toggleMasterActive('${v.id}')">${active?'Désactiver':'Réactiver'}</button></td></tr>`;
+  }).join('');
+}
+async function addMasterVehicle(){
+  const marque=document.getElementById('mMarque').value.trim().toUpperCase();
+  const modele=document.getElementById('mModele').value.trim();
+  const motor=document.getElementById('mMotor').value.trim();
+  const finition=document.getElementById('mFinition').value.trim();
+  const segment=document.getElementById('mSegment').value.trim()||'Divers';
+  const type=document.getElementById('mType').value;
+  const catalogue=num(document.getElementById('mCatalogue'));
+  const fi=num(document.getElementById('mFi'))||FI_DEFAULT;
+  if(!marque||!modele||!finition) return showToast('Renseignez au moins marque, modèle et finition');
+  const v={id:'m'+Date.now(),marque,modele,motor,finition,segment,type,fi,catalogue,role:'client',comment:'',months:{}};
+  VEHICLES.push(v);
+  if(Store.LIVE) await Store.upsertVehicle(v);
+  ['mMarque','mModele','mMotor','mFinition','mSegment','mCatalogue'].forEach(id=>document.getElementById(id).value='');
+  showToast(marque+' '+modele+' '+finition+' ajoutée au référentiel');
+  fillSelectOnce(); renderAll();
+}
+async function toggleMasterActive(id){
+  const v=VEHICLES.find(x=>x.id===id); if(!v) return;
+  v.statutOverride = v.statutOverride==='Arrêtée' ? undefined : 'Arrêtée';
+  if(Store.LIVE) await Store.upsertVehicle(v);
+  showToast((v.statutOverride==='Arrêtée'?'Désactivée : ':'Réactivée : ')+v.marque+' '+v.modele);
+  renderMaster();
+}
+
+/* ================= CONTROL (Valyn) ================= */
+function renderControl(){
+  const el=document.getElementById('controlBody'); if(!el) return;
+  document.getElementById('ctrlPeriod').innerText=MLABEL[CURRENT]||CURRENT;
+  const list=scope(CURRENT);
+  document.getElementById('ctrlCount').innerText=list.length+' référence(s)';
+  el.innerHTML=list.map(v=>{
+    const e=vehMonth(v,CURRENT).e; const prev=vehMonth(v,PREV);
+    const ix=indice(v,CURRENT); const st=statut(v,CURRENT);
+    return `<tr><td><strong>${v.marque} ${v.modele}</strong><br><span style="color:var(--muted);font-size:11px">${v.finition}</span></td><td>${statutChip(st)}</td><td class="num">${fmt(v.catalogue)}</td><td class="num">${fmt(e.pvpTTC)}</td><td class="num">${fmt(e.K)}</td><td class="num">${fmtP(e.remise)}</td><td class="num">${fmt(Math.abs(e.remiseHT))}</td><td class="num">${fmt(e.P)}</td><td class="num">${(e.R*100).toFixed(0)}%</td><td class="num">${fmt(e.S)}</td><td class="num">${fmt(e.CEM)}</td><td class="num">${prev&&prev.e?fmt(prev.e.CEM):'—'}</td><td class="num">${fmt(e.Y)}</td><td class="num">${fmt(e.Z)}</td><td class="num">${ix?ix.toFixed(0):'—'}</td></tr>`;
+  }).join('')||'<tr><td colspan="15" style="text-align:center;color:var(--muted)">Aucune donnée</td></tr>';
+}
+function validateControl(){
+  const period=nextPeriod(CURRENT);
+  const row=cycleRow(period);
+  if(row&&row.status==='QUALITY_CONTROL'){ advanceStatus(period,'READY_TO_PUBLISH'); }
+  else showToast('Contrôle enregistré');
+}
+
+/* ================= COHERENCE (Valyn) ================= */
+let COHERENCE_NOTES=load(LS.cohnotes,{});
+function setCoherenceNote(id,val){ COHERENCE_NOTES[id]=val; save(LS.cohnotes,COHERENCE_NOTES); }
+function renderCoherence(){
+  const kEl=document.getElementById('coherenceKpis'); const bEl=document.getElementById('coherenceBody');
+  if(!kEl||!bEl) return;
+  const rows=scope(CURRENT).map(v=>{
+    const c=vehMonth(v,CURRENT), p=vehMonth(v,PREV);
+    if(!p||!p.e||!c.e) return null;
+    return {v,prev:p.e.CEM,cur:c.e.CEM,delta:(c.e.CEM-p.e.CEM)/p.e.CEM};
+  }).filter(Boolean);
+  const anomalies=rows.filter(r=>Math.abs(r.delta)>0.03);
+  const noHist=scope(CURRENT).filter(v=>!vehMonth(v,PREV)).length;
+  const avgDelta=rows.length?rows.reduce((a,r)=>a+r.delta,0)/rows.length:0;
+  kEl.innerHTML=[
+    {lab:'Variations anormales',val:anomalies.length},
+    {lab:'Sans historique',val:noHist},
+    {lab:'Écart CEM moyen',val:fmtP(avgDelta)}
+  ].map(k=>`<div class="card kpi"><div class="label">${k.lab}</div><div class="value">${k.val}</div></div>`).join('');
+  bEl.innerHTML=anomalies.length?anomalies.map(r=>{
+    const pct=(r.delta*100); const cls=r.delta<0?'chip-ok':'chip-alert';
+    const note=COHERENCE_NOTES[r.v.id]||'';
+    return `<tr><td><strong>${r.v.marque} ${r.v.modele}</strong> ${r.v.finition}</td><td>Prix CEM</td><td class="num">${fmt(r.prev)}</td><td class="num">${fmt(r.cur)}</td><td class="num">${pct>=0?'+':''}${pct.toFixed(1)}%</td><td><span class="chip ${cls}">À justifier</span></td><td><input class="field" style="width:100%" value="${note}" onchange="setCoherenceNote('${r.v.id}',this.value)" placeholder="Commentaire..."></td></tr>`;
+  }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--muted)">Aucune variation anormale détectée</td></tr>';
+}
+
+/* ================= DOCS (Valyn) ================= */
+function renderDocs(){
+  const el=document.getElementById('docsBody'); if(!el) return;
+  const rows=VEHICLES.filter(v=>v.comment);
+  el.innerHTML=rows.length?rows.map(v=>`<tr><td>${MLABEL[CURRENT]||CURRENT}</td><td>${v.marque} ${v.modele} ${v.finition}</td><td>Commentaire</td><td>—</td><td><span class="chip chip-muted">Non joint</span></td><td>${v.role==='catalog'?'Interne':'Client'}</td></tr>`).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted)">Aucun document</td></tr>';
+}
+
 /* ================= INIT ================= */
 function renderAll(){
   renderKPI(); renderTopMoves(); renderTopRemises(); renderAlerts();
@@ -1808,6 +2132,7 @@ function renderAll(){
   renderCatalog(); renderQuality(); renderEngineExample(); calcSimCEM(); calcSimRemise();
   renderUsers(); renderDiffusion(); renderDataAdmin(); renderNotif();
   renderSelection(); renderPilotage();
+  renderTickets(); renderSettings(); renderVdash(); renderMaster(); renderControl(); renderCoherence(); renderDocs();
 }
 function bootSession(){
   const acc=currentAccount();
