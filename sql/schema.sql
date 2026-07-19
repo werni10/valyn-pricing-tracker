@@ -210,25 +210,40 @@ drop policy if exists reads_own on public.reads;
 create policy reads_own on public.reads for all
   using ( user_id = auth.uid() ) with check ( user_id = auth.uid() );
 
--- months: admin full; client reads/writes only its own org's months
--- (client needs write to submit its M+1 selection and advance status to SELECTION_SUBMITTED).
+-- months: admin full. Client is deliberately limited to submitting its own M+1
+-- selection — it can read its org, create a month, and make the single
+-- DRAFT_SELECTION -> SELECTION_SUBMITTED transition. It cannot publish, revert,
+-- re-open, or delete a month (that stays a Valyn-only action).
 drop policy if exists months_admin on public.months;
 create policy months_admin on public.months for all
   using ( public.is_admin() ) with check ( public.is_admin() );
 
-drop policy if exists months_client_all on public.months;
-create policy months_client_all on public.months for all
-  using ( org = public.my_org() ) with check ( org = public.my_org() );
+drop policy if exists months_client_all on public.months;   -- remove old over-permissive policy
+drop policy if exists months_client_read on public.months;
+create policy months_client_read on public.months for select
+  using ( org = public.my_org() );
 
--- selections: admin full; client manages selections for months in its own org.
+drop policy if exists months_client_insert on public.months;
+create policy months_client_insert on public.months for insert
+  with check ( org = public.my_org() and status in ('DRAFT_SELECTION','SELECTION_SUBMITTED') );
+
+drop policy if exists months_client_submit on public.months;
+create policy months_client_submit on public.months for update
+  using ( org = public.my_org() and status = 'DRAFT_SELECTION' )
+  with check ( org = public.my_org() and status = 'SELECTION_SUBMITTED' );
+
+-- selections: admin full; client may manage its picks only while the month is
+-- still open (draft or just-submitted) — not after Valyn starts the analysis.
 drop policy if exists selections_admin on public.selections;
 create policy selections_admin on public.selections for all
   using ( public.is_admin() ) with check ( public.is_admin() );
 
 drop policy if exists selections_client_all on public.selections;
 create policy selections_client_all on public.selections for all
-  using ( exists (select 1 from public.months m where m.id = month_id and m.org = public.my_org()) )
-  with check ( exists (select 1 from public.months m where m.id = month_id and m.org = public.my_org()) );
+  using ( exists (select 1 from public.months m where m.id = month_id and m.org = public.my_org()
+                  and m.status in ('DRAFT_SELECTION','SELECTION_SUBMITTED')) )
+  with check ( exists (select 1 from public.months m where m.id = month_id and m.org = public.my_org()
+                  and m.status in ('DRAFT_SELECTION','SELECTION_SUBMITTED')) );
 
 -- documents: admin full; client reads/uploads its own client-visible docs for its org's vehicles.
 drop policy if exists documents_admin on public.documents;
@@ -257,13 +272,19 @@ create policy proofs_admin_all on storage.objects for all
   with check ( bucket_id in ('proofs','imports') and public.is_admin() );
 
 -- client can read/upload only inside their own org's folder: proofs/<org>/...
+-- Valyn-internal files live under proofs/<org>/_interne/... and stay admin-only,
+-- so the bytes themselves are protected, not just the documents metadata row.
 drop policy if exists proofs_client_read on storage.objects;
 create policy proofs_client_read on storage.objects for select
-  using ( bucket_id = 'proofs' and (storage.foldername(name))[1] = public.my_org() );
+  using ( bucket_id = 'proofs'
+          and (storage.foldername(name))[1] = public.my_org()
+          and coalesce((storage.foldername(name))[2],'') <> '_interne' );
 
 drop policy if exists proofs_client_upload on storage.objects;
 create policy proofs_client_upload on storage.objects for insert
-  with check ( bucket_id = 'proofs' and (storage.foldername(name))[1] = public.my_org() );
+  with check ( bucket_id = 'proofs'
+               and (storage.foldername(name))[1] = public.my_org()
+               and coalesce((storage.foldername(name))[2],'') <> '_interne' );
 
 -- =====================================================================
 -- SEED DATA (real values from Document Excel Auto Najma.xlsx)

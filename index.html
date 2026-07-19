@@ -1463,7 +1463,9 @@ async function uploadProofDocument(){
   const visibility=(acc&&acc.role==='admin')?document.getElementById('ulVisibility').value:'client';
   if(!vehicleId||!PENDING_PROOF_FILE) return showToast('Choisissez une finition et un fichier');
   const org=CFG.org||'Auto Nejma';
-  const path=`${org}/${vehicleId}/${type}-${Date.now()}-${PENDING_PROOF_FILE.name}`;
+  // interne files go under _interne/ so storage RLS keeps the bytes admin-only
+  const prefix=visibility==='interne'?`${org}/_interne`:`${org}`;
+  const path=`${prefix}/${vehicleId}/${type}-${Date.now()}-${PENDING_PROOF_FILE.name}`;
   const doc={id:'doc'+Date.now(),vehicleId,period:CURRENT,type,path,name:PENDING_PROOF_FILE.name,visibility,createdAt:new Date().toISOString()};
   if(Store.LIVE){
     const ok=await Store.uploadProof(path,PENDING_PROOF_FILE);
@@ -1768,7 +1770,7 @@ function applyRights(){
   document.querySelectorAll('.nav-link').forEach(l=>{
     const cap=l.dataset.cap;let ok;
     if(cap==='contact')ok=!isAdmin&&!!acc.rights[cap]; // Auto Nejma contacts Valyn, not the reverse
-    else if(l.dataset.admin==='1')ok=isAdmin&&acc.rights[cap];
+    else if(l.dataset.admin==='1')ok=isAdmin; // admin = full access to all Valyn admin pages (rights JSON may predate newer pages)
     else ok=isAdmin||!!acc.rights[cap];
     l.style.display=ok?'':'none';
   });
@@ -2031,8 +2033,11 @@ async function submitSelection(){
   if(Store.LIVE){
     const dbRow=await Store.upsertMonth(period,'SELECTION_SUBMITTED',{submitted_at:row.submittedAt});
     if(dbRow){ row.id=dbRow.id; await Store.saveSelection(dbRow.id,ids); }
+  } else {
+    // demo only: illustrate the notification to Valyn. In live, clients can't post
+    // broadcasts (RLS); the Pilotage status change is what surfaces to Valyn.
+    pushBroadcast('Sélection '+(MLABEL[period]||period)+' transmise',`${currentAccount().name} a transmis ${ids.length} finition(s) pour l'analyse de ${MLABEL[period]||period}.`,'moyenne');
   }
-  pushBroadcast('Sélection '+(MLABEL[period]||period)+' transmise',`${currentAccount().name} a transmis ${ids.length} finition(s) pour l'analyse de ${MLABEL[period]||period}.`,'moyenne');
   showToast('Sélection transmise — modification possible sous 24 h');
   renderSelection(); renderPilotage();
 }
