@@ -268,6 +268,7 @@
       <button class="nav-link" data-page="priceindex" data-cap="priceindex"><span class="ico">◈</span>Price Index segment</button>
       <button class="nav-link" data-page="benchmark" data-cap="benchmark"><span class="ico">◆</span>Benchmark marques</button>
       <button class="nav-link" data-page="reports" data-cap="reports"><span class="ico">⇩</span>Rapports & exports</button>
+      <button class="nav-link" data-page="selection" data-cap="selection"><span class="ico">+</span>Sélection analyse M+1</button>
     </div>
     <div class="nav-block">
       <div class="nav-title">Outils d'aide à la décision</div>
@@ -283,6 +284,7 @@
       <button class="nav-link" data-page="dataadmin" data-cap="dataadmin" data-admin="1"><span class="ico">⬆</span>Import données (xlsx) <span class="badge">Admin</span></button>
       <button class="nav-link" data-page="diffusion" data-cap="diffusion" data-admin="1"><span class="ico">✉</span>Diffusion & alertes</button>
       <button class="nav-link" data-page="users" data-cap="users" data-admin="1"><span class="ico">◐</span>Accès & droits</button>
+      <button class="nav-link" data-page="pilotage" data-cap="pilotage" data-admin="1"><span class="ico">◈</span>Pilotage mensuel</button>
     </div>
     <div class="sidebar-card">
       <strong>Cycle de publication</strong>
@@ -460,6 +462,34 @@
         <div class="export-card"><div><h4>Rapport PDF / impression</h4><p>Synthèse direction imprimable : KPI, alertes, benchmark, comparatif.</p></div><button class="btn btn-primary" onclick="window.print()">Générer</button></div>
         <div class="export-card"><div><h4>Comparatif M/M-1 (CSV)</h4><p>Évolutions showroom, remise et CEM avec tags de lecture.</p></div><button class="btn btn-light" onclick="exportCompareCSV()">Télécharger</button></div>
         <div class="export-card"><div><h4>Annexe justificatifs</h4><p>Brochures, proformas, photos et supports commerciaux collectés.</p></div><button class="btn btn-light" onclick="openModal('proofModal')">Consulter</button></div>
+      </div>
+    </section>
+
+    <!-- SELECTION M+1 -->
+    <section class="page" id="selection">
+      <div class="card" id="selectionStatusCard"></div>
+      <div class="card" id="selectionFormCard" style="margin-top:16px">
+        <div class="section-head">
+          <div><h3>Choix des finitions — <span id="selPeriodLabel"></span></h3><p>Sélectionnez les finitions à analyser le mois prochain. L'engagement est requis pour transmettre.</p></div>
+          <span class="right-note" id="selCount"></span>
+        </div>
+        <div class="filters">
+          <input class="field search" id="selSearch" placeholder="Rechercher marque, modèle, finition..." oninput="renderSelection()">
+          <select class="field" id="selBrand" onchange="renderSelection()"><option value="">Toutes marques</option></select>
+          <button class="btn btn-light" onclick="selectAll(true)">Tout sélectionner</button>
+          <button class="btn btn-light" onclick="selectAll(false)">Tout désélectionner</button>
+          <button class="btn btn-ghost" onclick="importPrevSelection()">↺ Importer sélection précédente</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th></th><th>Marque</th><th>Modèle</th><th>Finition</th><th>Segment</th><th>Historique</th></tr></thead>
+            <tbody id="selectionBody"></tbody>
+          </table>
+        </div>
+        <div class="empty-note" style="text-align:left;margin-top:14px">
+          <label style="font-size:12.5px;display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="selEngage" style="margin-top:2px"> Je confirme que cette sélection est définitive. Une demande de modification peut être adressée à Valyn dans les 24 heures suivant la transmission.</label>
+          <button class="btn btn-primary" style="margin-top:12px" onclick="submitSelection()">Transmettre la sélection pour analyse</button>
+        </div>
       </div>
     </section>
 
@@ -672,6 +702,14 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
       <div class="card">
         <div class="section-head"><div><h3>Accès & droits</h3><p>Un compte = un ensemble de droits. Activez/coupez chaque module par compte. Le compte reçoit exactement ce que vous cochez.</p></div><button class="btn btn-primary" onclick="inviteAccount()">+ Inviter un compte</button></div>
         <div id="usersList"></div>
+      </div>
+    </section>
+
+    <!-- PILOTAGE (Valyn) -->
+    <section class="page" id="pilotage">
+      <div class="card">
+        <div class="section-head"><div><h3>Cycle mensuel</h3><p>Chaque mois avance de la sélection client à la publication. La transmission au client n'est possible qu'une fois toutes les étapes validées.</p></div></div>
+        <div id="pilotageList"></div>
       </div>
     </section>
   </main>
@@ -1274,7 +1312,9 @@ const PAGES={
   engine:["Moteur d'analyse","Barème taxe de luxe, chaîne de calcul et exemple travaillé."],
   catalog:["Catalogue modèles","Base centrale des finitions suivies et de référence."],
   collection:["Collecte & preuves","Saisie terrain — ajoute une observation recalculée au tracker."],
-  quality:["Contrôle qualité","Cohérence CEM, paliers fiscaux et anomalies avant publication."]
+  quality:["Contrôle qualité","Cohérence CEM, paliers fiscaux et anomalies avant publication."],
+  selection:["Sélection analyse M+1","Choisissez les finitions à analyser le mois prochain et transmettez la sélection à Valyn."],
+  pilotage:["Pilotage mensuel","Suivi des étapes du cycle mensuel et transmission de l'analyse au client."]
 };
 document.querySelectorAll(".nav-link").forEach(btn=>{
   btn.addEventListener("click",()=>{
@@ -1295,9 +1335,9 @@ function showToast(msg){ const t=document.getElementById("toast"); t.innerText=m
 function runAnalysis(){ renderAll(); showToast("Analyse recalculée : KPI, alertes, benchmark et exports à jour"); document.querySelectorAll(".kpi .value").forEach(k=>k.animate([{transform:"scale(1)"},{transform:"scale(1.06)"},{transform:"scale(1)"}],{duration:500})); }
 
 /* ================= AUTH / ACCOUNTS / RIGHTS ================= */
-const CLIENT_CAPS=['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','engine','catalog','collection','quality'];
-const ADMIN_CAPS=['dataadmin','diffusion','users'];
-const CAP_LABEL={dashboard:'Dashboard',tracked:'Finitions trackées',history:'Analyse historique',compare:'Comparatif M/M-1',priceindex:'Price Index',benchmark:'Benchmark',reports:'Rapports & exports',simcem:'Simulateur CEM',simremise:'Simulateur remise',engine:'Moteur d\'analyse',catalog:'Catalogue',collection:'Collecte & preuves',quality:'Contrôle qualité',dataadmin:'Import données',diffusion:'Diffusion & alertes',users:'Accès & droits'};
+const CLIENT_CAPS=['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','engine','catalog','collection','quality','selection'];
+const ADMIN_CAPS=['dataadmin','diffusion','users','pilotage'];
+const CAP_LABEL={dashboard:'Dashboard',tracked:'Finitions trackées',history:'Analyse historique',compare:'Comparatif M/M-1',priceindex:'Price Index',benchmark:'Benchmark',reports:'Rapports & exports',simcem:'Simulateur CEM',simremise:'Simulateur remise',engine:'Moteur d\'analyse',catalog:'Catalogue',collection:'Collecte & preuves',quality:'Contrôle qualité',selection:'Sélection M+1',dataadmin:'Import données',diffusion:'Diffusion & alertes',users:'Accès & droits',pilotage:'Pilotage mensuel'};
 const AV_COLORS={admin:'linear-gradient(135deg,#f47b20,#ff9a4d)',client:'linear-gradient(135deg,#111827,#374151)'};
 function initials(n){return (n.replace(/[^\p{L}\s]/gu,'').trim().split(/\s+/).map(w=>w[0]).filter(Boolean).slice(0,2).join('')||'?').toUpperCase();}
 function grant(list){const r={};CLIENT_CAPS.concat(ADMIN_CAPS).forEach(c=>r[c]=false);list.forEach(c=>r[c]=true);return r;}
@@ -1305,11 +1345,11 @@ function allTrue(){return grant(CLIENT_CAPS.concat(ADMIN_CAPS));}
 
 const DEFAULT_ACCOUNTS=[
   {id:'valyn-admin',name:'Sofia Bennani',org:'Valyn Advisory',role:'admin',email:'analyst@valyn.ma',active:true,rights:allTrue()},
-  {id:'an-dg',name:'Direction Générale',org:'Auto Nejma',role:'client',email:'dg@autonejma.ma',active:true,rights:grant(['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise'])},
-  {id:'an-pricing',name:'Pricing Manager',org:'Auto Nejma',role:'client',email:'pricing@autonejma.ma',active:true,rights:grant(['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','catalog','collection','quality'])},
+  {id:'an-dg',name:'Direction Générale',org:'Auto Nejma',role:'client',email:'dg@autonejma.ma',active:true,rights:grant(['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','selection'])},
+  {id:'an-pricing',name:'Pricing Manager',org:'Auto Nejma',role:'client',email:'pricing@autonejma.ma',active:true,rights:grant(['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','catalog','collection','quality','selection'])},
   {id:'an-mkt',name:'Marketing (lecture)',org:'Auto Nejma',role:'client',email:'marketing@autonejma.ma',active:true,rights:grant(['dashboard','tracked','reports'])}
 ];
-const LS={acc:'valyn_accounts',sess:'valyn_session',br:'valyn_broadcasts',reads:'valyn_reads',upload:'valyn_upload',uploadMeta:'valyn_upload_meta'};
+const LS={acc:'valyn_accounts',sess:'valyn_session',br:'valyn_broadcasts',reads:'valyn_reads',upload:'valyn_upload',uploadMeta:'valyn_upload_meta',cycle:'valyn_cycle',sel:'valyn_selections'};
 function load(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
 
@@ -1331,18 +1371,25 @@ const Store = {
     return Object.values(by);
   },
   async hydrate(uid){
-    const [{data:profs},{data:vs},{data:md},{data:brs},{data:rd}] = await Promise.all([
+    const [{data:profs},{data:vs},{data:md},{data:brs},{data:rd},{data:mo},{data:sels}] = await Promise.all([
       this.sb.from('profiles').select('*').order('created_at'),
       this.sb.from('vehicles').select('*'),
       this.sb.from('monthly_data').select('*'),
       this.sb.from('broadcasts').select('*').order('created_at'),
-      this.sb.from('reads').select('broadcast_id').eq('user_id',uid)
+      this.sb.from('reads').select('broadcast_id').eq('user_id',uid),
+      this.sb.from('months').select('*').order('period'),
+      this.sb.from('selections').select('*')
     ]);
     ACCOUNTS = (profs||[]).map(p=>this._profToAcc(p));
     const built = this._rowsToVehicles(vs||[], md||[]);
     if(built.length) VEHICLES = built;                      // replace seed with DB truth
     BROADCASTS = (brs||[]).map(b=>({id:b.id,title:b.title,body:b.body,priority:b.priority,from:b.from_name,date:new Date(b.created_at).toLocaleString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}));
     READS = {}; READS[uid] = (rd||[]).map(r=>r.broadcast_id);
+    if((mo||[]).length){
+      CYCLE = mo.map(m=>({id:m.id,period:String(m.period).slice(0,7),org:m.org,status:m.status,submittedAt:m.submitted_at,publishedAt:m.published_at}));
+      SELECTIONS = {};
+      (sels||[]).forEach(s=>{ const row=mo.find(m=>m.id===s.month_id); if(!row)return; const p=String(row.period).slice(0,7); (SELECTIONS[p]=SELECTIONS[p]||[]).push(s.vehicle_id); });
+    }
   },
   async persistAccount(a){ if(!this.sb)return; await this.sb.from('profiles').update({name:a.name,org:a.org,role:a.role,active:a.active,rights:a.rights}).eq('id',a.id); },
   async pushBroadcast(b){ if(!this.sb)return null; const {data}=await this.sb.from('broadcasts').insert({org:this.org,title:b.title,body:b.body,priority:b.priority,from_name:'Valyn Advisory'}).select().single(); return data; },
@@ -1357,8 +1404,44 @@ const Store = {
         {vehicle_id:v.id,period:CURRENT+'-01',showroom:r.showroom,cem_obs:r.cemObs},
         {onConflict:'vehicle_id,period'});
     }
+  },
+  async upsertMonth(period,status,extra){
+    if(!this.sb)return null;
+    const {data}=await this.sb.from('months').upsert({org:this.org,period:period+'-01',status,...extra},{onConflict:'org,period'}).select().single();
+    return data;
+  },
+  async saveSelection(monthId,vehicleIds){
+    if(!this.sb)return;
+    await this.sb.from('selections').delete().eq('month_id',monthId);
+    if(vehicleIds.length) await this.sb.from('selections').insert(vehicleIds.map(vid=>({month_id:monthId,vehicle_id:vid})));
   }
 };
+
+/* ===== M+1 selection cycle (dashboard workflow status) ===== */
+function nextPeriod(p){ let [y,m]=p.split('-').map(Number); m++; if(m>12){m=1;y++;} return y+'-'+String(m).padStart(2,'0'); }
+MLABEL[nextPeriod(CURRENT)]=MLABEL[nextPeriod(CURRENT)]||(()=>{const [y,m]=nextPeriod(CURRENT).split('-');const names=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];return names[+m-1]+' '+y.slice(2);})();
+function defaultCycle(){
+  const org=CFG.org||'Auto Nejma';
+  const rows=MONTHS.map(p=>({period:p,org,status:p===CURRENT?'PUBLISHED':'ARCHIVED',submittedAt:null,publishedAt:p===CURRENT?new Date().toISOString():null}));
+  rows.push({period:nextPeriod(CURRENT),org,status:'DRAFT_SELECTION',submittedAt:null,publishedAt:null});
+  return rows;
+}
+let CYCLE=load(LS.cycle,null)||defaultCycle();
+let SELECTIONS=load(LS.sel,{});
+function saveCycle(){save(LS.cycle,CYCLE);}
+function saveSelections(){save(LS.sel,SELECTIONS);}
+function cycleRow(period){return CYCLE.find(m=>m.period===period&&m.org===(CFG.org||'Auto Nejma'));}
+const STATUS_META={
+  DRAFT_SELECTION:{label:'Sélection à préparer',cls:'chip-muted'},
+  SELECTION_SUBMITTED:{label:'Sélection transmise',cls:'chip-seg'},
+  DATA_IN_PROGRESS:{label:'Analyse en cours',cls:'chip-track'},
+  CALCULATION_ISSUES:{label:'Incohérences à corriger',cls:'chip-alert'},
+  QUALITY_CONTROL:{label:'Contrôle qualité',cls:'chip-track'},
+  READY_TO_PUBLISH:{label:'Prêt à transmettre',cls:'chip-new'},
+  PUBLISHED:{label:'Analyse transmise',cls:'chip-ok'},
+  ARCHIVED:{label:'Archivé',cls:'chip-dark'}
+};
+const STATUS_ORDER=['DRAFT_SELECTION','SELECTION_SUBMITTED','DATA_IN_PROGRESS','CALCULATION_ISSUES','QUALITY_CONTROL','READY_TO_PUBLISH','PUBLISHED','ARCHIVED'];
 
 let ACCOUNTS=load(LS.acc,null)||DEFAULT_ACCOUNTS;
 let SESSION=load(LS.sess,null);
@@ -1616,12 +1699,115 @@ window.addEventListener('DOMContentLoaded',()=>{
   dz.addEventListener('drop',e=>{if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
 });
 
+/* ================= SELECTION M+1 ================= */
+function renderSelection(){
+  const el=document.getElementById('selectionBody'); if(!el) return;
+  const period=nextPeriod(CURRENT);
+  document.getElementById('selPeriodLabel').innerText=MLABEL[period]||period;
+  const row=cycleRow(period)||{status:'DRAFT_SELECTION',submittedAt:null};
+  const meta=STATUS_META[row.status];
+  const submitted=row.status!=='DRAFT_SELECTION';
+  const picked=SELECTIONS[period]||[];
+  const statusCard=document.getElementById('selectionStatusCard');
+  if(submitted){
+    const submittedAt=row.submittedAt?new Date(row.submittedAt):null;
+    const hoursLeft=submittedAt?Math.max(0,24-((Date.now()-submittedAt.getTime())/36e5)):0;
+    statusCard.innerHTML=`<div class="section-head"><div><h3>Sélection ${MLABEL[period]||period}</h3><p>${picked.length} finition(s) transmise(s)${submittedAt?' le '+submittedAt.toLocaleString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}.</p></div><span class="chip ${meta.cls}">${meta.label}</span></div>`+
+      (hoursLeft>0?`<div class="empty-note" style="text-align:left">Modification possible par e-mail à Valyn pendant encore <strong>${hoursLeft.toFixed(1)} h</strong>.</div>`:`<div class="empty-note" style="text-align:left">Fenêtre de modification expirée — seul Valyn peut rouvrir cette sélection.</div>`);
+    document.getElementById('selectionFormCard').style.display='none';
+  } else {
+    statusCard.innerHTML=`<div class="section-head"><div><h3>Sélection ${MLABEL[period]||period}</h3><p>À préparer et transmettre.</p></div><span class="chip ${meta.cls}">${meta.label}</span></div>`;
+    document.getElementById('selectionFormCard').style.display='';
+  }
+  const q=(document.getElementById('selSearch').value||'').toLowerCase();
+  const fb=document.getElementById('selBrand').value;
+  const brands=[...new Set(VEHICLES.map(v=>v.marque))];
+  document.getElementById('selBrand').innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${b}</option>`).join('');
+  document.getElementById('selBrand').value=fb;
+  const list=VEHICLES.filter(v=>{
+    const s=`${v.marque} ${v.modele} ${v.finition} ${v.segment}`.toLowerCase();
+    return s.includes(q)&&(!fb||v.marque===fb);
+  });
+  el.innerHTML=list.map(v=>{
+    const checked=picked.includes(v.id)?'checked':'';
+    const already=v.months[CURRENT]?'<span class="chip chip-ok">Déjà suivi</span>':'<span class="chip chip-new">Nouveau</span>';
+    return `<tr><td><input type="checkbox" class="selChk" data-id="${v.id}" ${checked} ${submitted?'disabled':''} onchange="selCountUpdate()"></td><td>${v.marque}</td><td>${v.modele}</td><td>${v.finition}</td><td><span class="chip chip-seg">${v.segment}</span></td><td>${already}</td></tr>`;
+  }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--muted)">Aucune finition</td></tr>';
+  selCountUpdate();
+}
+function selCountUpdate(){
+  const c=document.getElementById('selCount'); if(!c) return;
+  c.innerText=document.querySelectorAll('.selChk:checked').length+' finition(s) sélectionnée(s)';
+}
+function selectAll(on){ document.querySelectorAll('.selChk').forEach(c=>{ if(!c.disabled) c.checked=on; }); selCountUpdate(); }
+function importPrevSelection(){
+  const cur=VEHICLES.filter(v=>v.months[CURRENT]).map(v=>v.id);
+  document.querySelectorAll('.selChk').forEach(c=>{ c.checked=cur.includes(c.dataset.id); });
+  selCountUpdate();
+  showToast('Sélection de '+(MLABEL[CURRENT]||CURRENT)+' importée');
+}
+async function submitSelection(){
+  const period=nextPeriod(CURRENT);
+  const ids=[...document.querySelectorAll('.selChk:checked')].map(c=>c.dataset.id);
+  if(!ids.length) return showToast('Sélectionnez au moins une finition');
+  if(!document.getElementById('selEngage').checked) return showToast("Veuillez cocher l'engagement");
+  SELECTIONS[period]=ids; saveSelections();
+  let row=cycleRow(period);
+  const org=CFG.org||'Auto Nejma';
+  if(!row){ row={period,org,status:'DRAFT_SELECTION',submittedAt:null,publishedAt:null}; CYCLE.push(row); }
+  row.status='SELECTION_SUBMITTED'; row.submittedAt=new Date().toISOString();
+  saveCycle();
+  if(Store.LIVE){
+    const dbRow=await Store.upsertMonth(period,'SELECTION_SUBMITTED',{submitted_at:row.submittedAt});
+    if(dbRow){ row.id=dbRow.id; await Store.saveSelection(dbRow.id,ids); }
+  }
+  pushBroadcast('Sélection '+(MLABEL[period]||period)+' transmise',`${currentAccount().name} a transmis ${ids.length} finition(s) pour l'analyse de ${MLABEL[period]||period}.`,'moyenne');
+  showToast('Sélection transmise — modification possible sous 24 h');
+  renderSelection(); renderPilotage();
+}
+
+/* ================= PILOTAGE (Valyn) ================= */
+function renderPilotage(){
+  const el=document.getElementById('pilotageList'); if(!el) return;
+  const org=CFG.org||'Auto Nejma';
+  const rows=CYCLE.filter(m=>m.org===org).slice().sort((a,b)=>a.period<b.period?1:-1);
+  const steps=['DRAFT_SELECTION','SELECTION_SUBMITTED','DATA_IN_PROGRESS','QUALITY_CONTROL','READY_TO_PUBLISH','PUBLISHED'];
+  const stepLabels=['Sélection','Intégration','Calcul','Contrôle','Publication'];
+  el.innerHTML=rows.map(row=>{
+    const meta=STATUS_META[row.status];
+    const sel=(SELECTIONS[row.period]||[]).length;
+    const stepIdx=steps.indexOf(row.status);
+    const stepsHtml=stepLabels.map((s,i)=>`<span class="chip ${i<stepIdx?'chip-ok':(i===stepIdx?'chip-track':'chip-muted')}">${s}</span>`).join(' ');
+    let actionBtn='';
+    if(row.status==='SELECTION_SUBMITTED') actionBtn=`<button class="btn btn-primary" onclick="advanceStatus('${row.period}','DATA_IN_PROGRESS')">Démarrer intégration</button>`;
+    else if(row.status==='DATA_IN_PROGRESS') actionBtn=`<button class="btn btn-primary" onclick="advanceStatus('${row.period}','QUALITY_CONTROL')">Lancer calcul</button>`;
+    else if(row.status==='QUALITY_CONTROL') actionBtn=`<button class="btn btn-primary" onclick="advanceStatus('${row.period}','READY_TO_PUBLISH')">Valider le contrôle</button>`;
+    else if(row.status==='READY_TO_PUBLISH') actionBtn=`<button class="btn btn-primary" onclick="advanceStatus('${row.period}','PUBLISHED')">Transmettre au client</button>`;
+    return `<div class="card" style="margin-bottom:12px"><div class="section-head"><div><h3>${MLABEL[row.period]||row.period}</h3><p>${sel} finition(s) sélectionnée(s)${row.submittedAt?' · transmise le '+new Date(row.submittedAt).toLocaleDateString('fr-FR'):''}</p></div><span class="chip ${meta.cls}">${meta.label}</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${stepsHtml}</div>${actionBtn?`<div style="margin-top:12px">${actionBtn}</div>`:''}</div>`;
+  }).join('')||'<p style="color:var(--muted)">Aucun mois enregistré.</p>';
+}
+async function advanceStatus(period,newStatus){
+  const row=cycleRow(period); if(!row) return;
+  row.status=newStatus;
+  if(newStatus==='PUBLISHED') row.publishedAt=new Date().toISOString();
+  saveCycle();
+  if(Store.LIVE){
+    const patch={}; if(newStatus==='PUBLISHED') patch.published_at=row.publishedAt;
+    const dbRow=await Store.upsertMonth(period,newStatus,patch);
+    if(dbRow) row.id=dbRow.id;
+  }
+  if(newStatus==='PUBLISHED') pushBroadcast('Analyse '+(MLABEL[period]||period)+' publiée',`L'analyse de ${MLABEL[period]||period} est disponible.`,'élevée');
+  showToast('Statut mis à jour : '+STATUS_META[newStatus].label);
+  renderPilotage();
+}
+
 /* ================= INIT ================= */
 function renderAll(){
   renderKPI(); renderTopMoves(); renderTopRemises(); renderAlerts();
   renderTracked(); renderHistory(); renderCompare(); renderPriceIndex(); renderBenchmark();
   renderCatalog(); renderQuality(); renderEngineExample(); calcSimCEM(); calcSimRemise();
   renderUsers(); renderDiffusion(); renderDataAdmin(); renderNotif();
+  renderSelection(); renderPilotage();
 }
 function bootSession(){
   const acc=currentAccount();

@@ -76,6 +76,28 @@ create table if not exists public.reads (
   primary key (user_id, broadcast_id)
 );
 
+-- ---------- months (monthly cycle status per client org) ----------
+create table if not exists public.months (
+  id           uuid primary key default gen_random_uuid(),
+  org          text not null default 'Auto Nejma',
+  period       date not null,                          -- first day of month
+  status       text not null default 'DRAFT_SELECTION',
+  submitted_at timestamptz,
+  published_at timestamptz,
+  created_at   timestamptz not null default now(),
+  unique (org, period)
+);
+
+-- ---------- selections (client's M+1 finition picks) ----------
+create table if not exists public.selections (
+  id         uuid primary key default gen_random_uuid(),
+  month_id   uuid not null references public.months(id) on delete cascade,
+  vehicle_id uuid not null references public.vehicles(id) on delete cascade,
+  author     uuid references auth.users(id),
+  created_at timestamptz not null default now(),
+  unique (month_id, vehicle_id)
+);
+
 -- =====================================================================
 -- Helper: is the current user an admin?
 -- SECURITY DEFINER so it can read profiles without recursive RLS.
@@ -129,6 +151,8 @@ alter table public.vehicles     enable row level security;
 alter table public.monthly_data enable row level security;
 alter table public.broadcasts   enable row level security;
 alter table public.reads        enable row level security;
+alter table public.months       enable row level security;
+alter table public.selections   enable row level security;
 
 -- profiles: user reads own row; admin reads/writes all; user may update own basic fields.
 drop policy if exists profiles_read on public.profiles;
@@ -170,6 +194,26 @@ create policy broadcasts_client_read on public.broadcasts for select
 drop policy if exists reads_own on public.reads;
 create policy reads_own on public.reads for all
   using ( user_id = auth.uid() ) with check ( user_id = auth.uid() );
+
+-- months: admin full; client reads/writes only its own org's months
+-- (client needs write to submit its M+1 selection and advance status to SELECTION_SUBMITTED).
+drop policy if exists months_admin on public.months;
+create policy months_admin on public.months for all
+  using ( public.is_admin() ) with check ( public.is_admin() );
+
+drop policy if exists months_client_all on public.months;
+create policy months_client_all on public.months for all
+  using ( org = public.my_org() ) with check ( org = public.my_org() );
+
+-- selections: admin full; client manages selections for months in its own org.
+drop policy if exists selections_admin on public.selections;
+create policy selections_admin on public.selections for all
+  using ( public.is_admin() ) with check ( public.is_admin() );
+
+drop policy if exists selections_client_all on public.selections;
+create policy selections_client_all on public.selections for all
+  using ( exists (select 1 from public.months m where m.id = month_id and m.org = public.my_org()) )
+  with check ( exists (select 1 from public.months m where m.id = month_id and m.org = public.my_org()) );
 
 -- =====================================================================
 -- Storage buckets (proofs + monthly imports). Run, then set policies below.
