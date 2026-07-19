@@ -63,10 +63,13 @@ create table if not exists public.broadcasts (
   title      text not null,
   body       text not null,
   priority   text not null default 'info',            -- info | moyenne | élevée
+  kind       text not null default 'alert',           -- report | alert | selection (drives client notif prefs)
   from_name  text not null default 'Valyn Advisory',
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now()
 );
+-- add kind to an already-created broadcasts table (safe on re-run)
+alter table public.broadcasts add column if not exists kind text not null default 'alert';
 
 -- ---------- reads (which user read which broadcast) ----------
 create table if not exists public.reads (
@@ -259,17 +262,15 @@ create policy documents_client_insert on public.documents for insert
   with check ( visibility = 'client' and org = public.my_org() );
 
 -- =====================================================================
--- Storage buckets (proofs + monthly imports). Run, then set policies below.
+-- Storage bucket for proofs (brochures, proformas, photos). Private.
 -- =====================================================================
 insert into storage.buckets (id, name, public) values ('proofs','proofs', false)
-  on conflict (id) do nothing;
-insert into storage.buckets (id, name, public) values ('imports','imports', false)
   on conflict (id) do nothing;
 
 drop policy if exists proofs_admin_all on storage.objects;
 create policy proofs_admin_all on storage.objects for all
-  using ( bucket_id in ('proofs','imports') and public.is_admin() )
-  with check ( bucket_id in ('proofs','imports') and public.is_admin() );
+  using ( bucket_id = 'proofs' and public.is_admin() )
+  with check ( bucket_id = 'proofs' and public.is_admin() );
 
 -- client can read/upload only inside their own org's folder: proofs/<org>/...
 -- Valyn-internal files live under proofs/<org>/_interne/... and stay admin-only,

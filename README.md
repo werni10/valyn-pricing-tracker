@@ -88,22 +88,28 @@ Supabase → **Authentication → URL Configuration** → set **Site URL** to yo
 
 ---
 
-## Monthly workflow (admin)
-1. Log in as the Valyn admin.
-2. **Import données** → drop the month's file (columns: Marque · Modèle · Motorisation · Finition · Segment · Type · Prix Showroom TTC · Prix remisé TTC CEM · Frais immat · Commentaire). A CSV template is downloadable in-app.
-3. Review the parsed preview → **Publier**. Rows write to Postgres; the client is auto-notified and their dashboard updates live.
-4. **Diffusion & alertes** for any extra message.
+## Monthly cycle (real, advancing)
+The active analytics month (`CURRENT`) is **derived** — it's the latest month with published data. The cycle advances for real:
+1. Client prepares its **Sélection analyse M+1** for the month being prepared, checks the engagement, transmits. It locks (client can't re-open server-side).
+2. Valyn tracks the month in **Pilotage** (Sélection → Intégration → Calcul → Contrôle → Publication).
+3. Valyn **Import données** → picks the target month in the "Mois à publier" selector → drops the file (columns: Marque · Modèle · Motorisation · Finition · Segment · Type · Prix Showroom TTC · Prix remisé TTC CEM · Frais immat · Commentaire) → **Publier**.
+4. On publish the month becomes `PUBLISHED`, the **dashboard advances** to it (previous month becomes M-1), and the **next month opens as a new draft** automatically. A month with no data can't be published.
+5. **Diffusion & alertes** for any extra message.
 
 ## Rights (admin)
 **Accès & droits** — one card per account, a toggle per module, active/inactive switch, role. Changes persist to the `profiles` table and take effect on the client's next load.
 
 ---
 
+## Proof files (brochures / proformas / photos)
+Real upload is wired. **Collecte & preuves** → pick finition + type + visibility → drop a file → it uploads to the private `proofs` storage bucket and shows in **Bibliothèque de preuves** and the finition's history panel. Client-visible files live at `proofs/<org>/…`; Valyn-internal files at `proofs/<org>/_interne/…`, which storage RLS keeps admin-only.
+
 ## Notes / hardening TODO
 - **Inviting users in live mode** is done from the Supabase dashboard (needs the service role). The in-app "Inviter" button is demo-only. To do it in-app, add a Supabase **Edge Function** using `auth.admin.inviteUserByEmail` with the service-role key (server-side only — never ship that key to the browser).
-- **Proof/file storage**: buckets `proofs` and `imports` exist with policies. The upload buttons in **Collecte** are stubbed — wire them to `sb.storage.from('proofs').upload(...)`.
+- **Contact tickets** (client → Valyn) and **notification emails** are in-app only — no email is sent yet. Notification preferences (Paramètres) gate the in-app bell/feed.
 - **Multi-client**: schema already scopes by `org`. To serve a second dealer, add their vehicles/broadcasts with a different `org` and set their profiles' `org` to match. RLS isolates them automatically.
 - xlsx parsing uses SheetJS from CDN. Offline → use the CSV path.
+- **Re-run `sql/schema.sql` after updates** — it's idempotent. Recent additions: `months`, `selections`, `documents` tables; `broadcasts.kind`; tightened RLS for the monthly workflow; `_interne` storage protection.
 
 ## Local dev
 ```bash

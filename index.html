@@ -769,6 +769,8 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
       <div class="grid two-col">
         <div class="card">
           <div class="section-head"><div><h3>Import données mensuelles (xlsx / csv)</h3><p>Chargez le fichier collecte du mois. Le moteur recalcule tout et publie au client.</p></div></div>
+          <label class="fl">Mois à publier</label>
+          <select class="field" id="daTarget" style="width:100%;margin-bottom:12px"></select>
           <div class="upload-zone" id="dropZone">
             <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFile(this.files[0])">
             <div style="font-size:34px">⬆</div>
@@ -919,9 +921,15 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
 <script>
 /* ================= ENGINE ================= */
 const TVA = 0.2, FI_DEFAULT = 7105;
-const MONTHS = ['2025-12','2026-01','2026-02','2026-03','2026-04','2026-05','2026-06'];
+// Calendar is dynamic: MONTHS/CURRENT/PREV are recomputed from the data + cycle
+// (see recomputeCalendar). Initial values let the app boot before data loads.
+let MONTHS = ['2025-12','2026-01','2026-02','2026-03','2026-04','2026-05','2026-06'];
 const MLABEL = {'2025-12':'Déc 25','2026-01':'Jan 26','2026-02':'Fév 26','2026-03':'Mar 26','2026-04':'Avr 26','2026-05':'Mai 26','2026-06':'Juin 26'};
-const CURRENT = '2026-06', PREV = '2026-05';
+let CURRENT = '2026-06', PREV = '2026-05';
+const MONTH_NAMES = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
+function periodLabel(p){ const [y,m]=p.split('-'); return MONTH_NAMES[+m-1]+' '+y.slice(2); }
+function ensureLabel(p){ if(p&&!MLABEL[p]) MLABEL[p]=periodLabel(p); return MLABEL[p]; }
+function prevPeriod(p){ let [y,m]=p.split('-').map(Number); m--; if(m<1){m=12;y--;} return y+'-'+String(m).padStart(2,'0'); }
 
 function luxeRate(remiseHT, type){
   if(type !== 'Thermique') return 0;
@@ -1421,8 +1429,13 @@ function calcSimRemise(){
     ` Dont ${fmtP(e.AA)} de remise fiscale et ${fmtP(e.AB)} de remise commerciale.`;
 }
 function renderEngineExample(){
-  const v=VEHICLES.find(x=>x.id==='a3-sline'); const e=vehMonth(v,CURRENT).e;
-  document.getElementById('engineExample').innerHTML=`<div class="row sub"><span>Finition</span><span>Audi A3 S-Line</span></div>`+breakdownHTML(e);
+  // pick a worked example that actually has data for the active month
+  const pref=VEHICLES.find(x=>x.id==='a3-sline'&&vehMonth(x,CURRENT)&&vehMonth(x,CURRENT).e);
+  const v=pref||scope(CURRENT)[0];
+  const el=document.getElementById('engineExample'); if(!el) return;
+  if(!v){ el.innerHTML='<div class="empty-note">Aucune finition calculable ce mois.</div>'; return; }
+  const e=vehMonth(v,CURRENT).e;
+  el.innerHTML=`<div class="row sub"><span>Finition</span><span>${v.marque} ${v.modele} ${v.finition}</span></div>`+breakdownHTML(e);
 }
 
 /* ================= COLLECTION (add observation) ================= */
@@ -1629,7 +1642,7 @@ const Store = {
     ACCOUNTS = (profs||[]).map(p=>this._profToAcc(p));
     const built = this._rowsToVehicles(vs||[], md||[]);
     if(built.length) VEHICLES = built;                      // replace seed with DB truth
-    BROADCASTS = (brs||[]).map(b=>({id:b.id,title:b.title,body:b.body,priority:b.priority,from:b.from_name,date:new Date(b.created_at).toLocaleString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}));
+    BROADCASTS = (brs||[]).map(b=>({id:b.id,title:b.title,body:b.body,priority:b.priority,kind:b.kind||'alert',from:b.from_name,date:new Date(b.created_at).toLocaleString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}));
     READS = {}; READS[uid] = (rd||[]).map(r=>r.broadcast_id);
     if((mo||[]).length){
       CYCLE = mo.map(m=>({id:m.id,period:String(m.period).slice(0,7),org:m.org,status:m.status,submittedAt:m.submitted_at,publishedAt:m.published_at}));
@@ -1639,16 +1652,17 @@ const Store = {
     DOCUMENTS = (docs||[]).map(d=>({id:d.id,vehicleId:d.vehicle_id,period:d.period?String(d.period).slice(0,7):null,type:d.type,path:d.file_path,name:d.file_name,visibility:d.visibility,createdAt:d.created_at}));
   },
   async persistAccount(a){ if(!this.sb)return; await this.sb.from('profiles').update({name:a.name,org:a.org,role:a.role,active:a.active,rights:a.rights}).eq('id',a.id); },
-  async pushBroadcast(b){ if(!this.sb)return null; const {data}=await this.sb.from('broadcasts').insert({org:this.org,title:b.title,body:b.body,priority:b.priority,from_name:'Valyn Advisory'}).select().single(); return data; },
+  async pushBroadcast(b){ if(!this.sb)return null; const {data}=await this.sb.from('broadcasts').insert({org:this.org,title:b.title,body:b.body,priority:b.priority,kind:b.kind||'alert',from_name:'Valyn Advisory',created_by:(SESSION&&SESSION.id)||null}).select().single(); return data; },
   async markRead(uid,ids){ if(!this.sb||!ids.length)return; await this.sb.from('reads').upsert(ids.map(id=>({user_id:uid,broadcast_id:id})),{onConflict:'user_id,broadcast_id'}); },
-  async upsertMonthly(recs){
+  async upsertMonthly(recs,period){
     if(!this.sb)return;
+    period=period||CURRENT;
     for(const r of recs){
       const {data:v} = await this.sb.from('vehicles').upsert(
         {org:this.org,marque:r.marque,modele:r.modele,motor:r.motor,finition:r.finition,segment:r.segment,type:r.type,fi:r.fi,catalogue:r.showroom,vrole:'client',comment:r.comment},
         {onConflict:'org,marque,modele,finition'}).select().single();
       if(v) await this.sb.from('monthly_data').upsert(
-        {vehicle_id:v.id,period:CURRENT+'-01',showroom:r.showroom,cem_obs:r.cemObs},
+        {vehicle_id:v.id,period:period+'-01',showroom:r.showroom,cem_obs:r.cemObs},
         {onConflict:'vehicle_id,period'});
     }
   },
@@ -1682,7 +1696,7 @@ const Store = {
   async saveDocument(doc){
     if(!this.sb)return null;
     const {data}=await this.sb.from('documents').insert(
-      {org:this.org,vehicle_id:doc.vehicleId,period:doc.period?doc.period+'-01':null,type:doc.type,file_path:doc.path,file_name:doc.name,visibility:doc.visibility}
+      {org:this.org,vehicle_id:doc.vehicleId,period:doc.period?doc.period+'-01':null,type:doc.type,file_path:doc.path,file_name:doc.name,visibility:doc.visibility,uploaded_by:(SESSION&&SESSION.id)||null}
     ).select().single();
     return data;
   }
@@ -1690,11 +1704,10 @@ const Store = {
 
 /* ===== M+1 selection cycle (dashboard workflow status) ===== */
 function nextPeriod(p){ let [y,m]=p.split('-').map(Number); m++; if(m>12){m=1;y++;} return y+'-'+String(m).padStart(2,'0'); }
-MLABEL[nextPeriod(CURRENT)]=MLABEL[nextPeriod(CURRENT)]||(()=>{const [y,m]=nextPeriod(CURRENT).split('-');const names=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];return names[+m-1]+' '+y.slice(2);})();
 function defaultCycle(){
   const org=CFG.org||'Auto Nejma';
-  const rows=MONTHS.map(p=>({period:p,org,status:p===CURRENT?'PUBLISHED':'ARCHIVED',submittedAt:null,publishedAt:p===CURRENT?new Date().toISOString():null}));
-  rows.push({period:nextPeriod(CURRENT),org,status:'DRAFT_SELECTION',submittedAt:null,publishedAt:null});
+  const rows=MONTHS.map(p=>({period:p,org,status:p==='2026-06'?'PUBLISHED':'ARCHIVED',submittedAt:null,publishedAt:p==='2026-06'?new Date().toISOString():null}));
+  rows.push({period:nextPeriod('2026-06'),org,status:'DRAFT_SELECTION',submittedAt:null,publishedAt:null});
   return rows;
 }
 let CYCLE=load(LS.cycle,null)||defaultCycle();
@@ -1703,6 +1716,39 @@ let DOCUMENTS=[]; // demo mode: in-memory only (object URLs don't survive reload
 function saveCycle(){save(LS.cycle,CYCLE);}
 function saveSelections(){save(LS.sel,SELECTIONS);}
 function cycleRow(period){return CYCLE.find(m=>m.period===period&&m.org===(CFG.org||'Auto Nejma'));}
+
+/* ===== dynamic calendar: CURRENT = latest published month with data ===== */
+function dataPeriods(){ const s=new Set(); VEHICLES.forEach(v=>Object.keys(v.months).forEach(k=>s.add(k))); return [...s].sort(); }
+// The month currently being prepared (first non-published, non-archived cycle row).
+function workingPeriod(){
+  const org=CFG.org||'Auto Nejma';
+  const open=CYCLE.filter(m=>m.org===org&&m.status!=='PUBLISHED'&&m.status!=='ARCHIVED').map(m=>m.period).sort();
+  return open.length?open[0]:nextPeriod(CURRENT);
+}
+function recomputeCalendar(){
+  const dp=dataPeriods();
+  MONTHS = dp.length?dp:['2026-06'];
+  const org=CFG.org||'Auto Nejma';
+  // active analytics month = latest PUBLISHED period that actually has data
+  const pub=CYCLE.filter(m=>m.org===org&&m.status==='PUBLISHED').map(m=>m.period).filter(p=>MONTHS.includes(p)).sort();
+  CURRENT = pub.length?pub[pub.length-1]:MONTHS[MONTHS.length-1];
+  const idx=MONTHS.indexOf(CURRENT);
+  PREV = idx>0?MONTHS[idx-1]:prevPeriod(CURRENT);
+  MONTHS.forEach(ensureLabel); ensureLabel(CURRENT); ensureLabel(PREV); ensureLabel(workingPeriod());
+  const np=document.getElementById('navPeriod'); if(np) np.innerText=MLABEL[CURRENT];
+  const tp=document.getElementById('trkPeriod'); if(tp) tp.innerText=MLABEL[CURRENT];
+}
+// Publish a month for real: mark PUBLISHED, advance the analytics month, open next draft.
+function publishPeriod(period){
+  const org=CFG.org||'Auto Nejma';
+  let row=cycleRow(period);
+  if(!row){ row={period,org,status:'PUBLISHED',submittedAt:null,publishedAt:null}; CYCLE.push(row); }
+  row.status='PUBLISHED'; row.publishedAt=row.publishedAt||new Date().toISOString();
+  const np=nextPeriod(period);
+  if(!cycleRow(np)) CYCLE.push({period:np,org,status:'DRAFT_SELECTION',submittedAt:null,publishedAt:null});
+  saveCycle(); recomputeCalendar();
+  return np;
+}
 const STATUS_META={
   DRAFT_SELECTION:{label:'Sélection à préparer',cls:'chip-muted'},
   SELECTION_SUBMITTED:{label:'Sélection transmise',cls:'chip-seg'},
@@ -1790,7 +1836,16 @@ function applyRights(){
 /* ================= BROADCASTS / NOTIFICATIONS ================= */
 let BROADCASTS=load(LS.br,[]);
 let READS=load(LS.reads,{});
-function unreadCount(){const acc=currentAccount();if(!acc)return 0;const r=READS[acc.id]||[];return BROADCASTS.filter(b=>!r.includes(b.id)).length;}
+function notifPrefs(){ const acc=currentAccount(); return acc?load(LS.notif+acc.id,{sel:true,pub:true,alert:true}):{sel:true,pub:true,alert:true}; }
+function broadcastAllowed(b){
+  const acc=currentAccount(); if(!acc||acc.role==='admin') return true; // admins see everything
+  const pr=notifPrefs(); const k=b.kind||'alert';
+  if(k==='report') return pr.pub!==false;
+  if(k==='selection') return pr.sel!==false;
+  return pr.alert!==false;
+}
+function visibleBroadcasts(){ return BROADCASTS.filter(broadcastAllowed); }
+function unreadCount(){const acc=currentAccount();if(!acc)return 0;const r=READS[acc.id]||[];return visibleBroadcasts().filter(b=>!r.includes(b.id)).length;}
 function prioChip(p){return p==='élevée'?'chip-alert':p==='moyenne'?'chip-track':'chip-new';}
 function prioIco(p){return p==='élevée'?'!':p==='moyenne'?'▲':'✉';}
 function renderNotif(){
@@ -1798,8 +1853,9 @@ function renderNotif(){
   const n=unreadCount();
   const badge=document.getElementById('bellBadge');
   if(n>0){badge.style.display='';badge.innerText=n;}else{badge.style.display='none';}
-  document.getElementById('notifMeta').innerText=`${BROADCASTS.length} message(s) · ${n} non lu(s)`;
-  document.getElementById('notifList').innerHTML=BROADCASTS.length?BROADCASTS.slice().reverse().map(b=>`
+  const vb=visibleBroadcasts();
+  document.getElementById('notifMeta').innerText=`${vb.length} message(s) · ${n} non lu(s)`;
+  document.getElementById('notifList').innerHTML=vb.length?vb.slice().reverse().map(b=>`
     <div class="alert" style="${r.includes(b.id)?'':'border-color:var(--orange);background:#fff8f1'}">
       <div class="alert-ico">${prioIco(b.priority)}</div>
       <div><h4>${b.title} <span class="chip ${prioChip(b.priority)}">${b.priority}</span></h4>
@@ -1809,17 +1865,19 @@ function renderNotif(){
 }
 function renderBroadcastCard(){
   const el=document.getElementById('broadcastCard');if(!el)return;
-  if(!BROADCASTS.length){el.innerHTML='';return;}
-  const recent=BROADCASTS.slice(-2).reverse();
+  const vbAll=visibleBroadcasts();
+  if(!vbAll.length){el.innerHTML='';return;}
+  const recent=vbAll.slice(-2).reverse();
   el.innerHTML=`<div class="card" style="margin-bottom:18px;border-left:4px solid var(--orange)">
-    <div class="section-head"><div><h3>Messages & alertes Valyn</h3><p>Communications de votre analyste dédié.</p></div><button class="btn btn-light btn-sm" onclick="openNotif()">Tout voir (${BROADCASTS.length})</button></div>
+    <div class="section-head"><div><h3>Messages & alertes Valyn</h3><p>Communications de votre analyste dédié.</p></div><button class="btn btn-light btn-sm" onclick="openNotif()">Tout voir (${vbAll.length})</button></div>
     <div class="alert-stack">${recent.map(b=>`<div class="alert"><div class="alert-ico">${prioIco(b.priority)}</div><div><h4>${b.title} <span class="chip ${prioChip(b.priority)}">${b.priority}</span></h4><p>${b.body}</p><small>${b.from} · ${b.date}</small></div></div>`).join('')}</div></div>`;
 }
-function openNotif(){const acc=currentAccount();const ids=BROADCASTS.map(b=>b.id);READS[acc.id]=ids;if(Store.LIVE){Store.markRead(acc.id,ids).catch(()=>{});}else save(LS.reads,READS);document.getElementById('notifPanel').classList.add('open');document.getElementById('overlay').classList.add('open');renderNotif();}
-function pushBroadcast(title,body,priority){
-  const local={id:'br'+Date.now(),title,body,priority,from:'Valyn Advisory',date:new Date().toLocaleString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})};
+function openNotif(){const acc=currentAccount();const ids=visibleBroadcasts().map(b=>b.id);READS[acc.id]=ids;if(Store.LIVE){Store.markRead(acc.id,ids).catch(()=>{});}else save(LS.reads,READS);document.getElementById('notifPanel').classList.add('open');document.getElementById('overlay').classList.add('open');renderNotif();}
+function pushBroadcast(title,body,priority,kind){
+  kind=kind||'alert';
+  const local={id:'br'+Date.now(),title,body,priority,kind,from:'Valyn Advisory',date:new Date().toLocaleString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})};
   BROADCASTS.push(local);
-  if(Store.LIVE){ Store.pushBroadcast({title,body,priority}).then(r=>{if(r)local.id=r.id;}).catch(e=>showToast('Diffusion non enregistrée : '+e.message)); }
+  if(Store.LIVE){ Store.pushBroadcast({title,body,priority,kind}).then(r=>{if(r)local.id=r.id;}).catch(e=>showToast('Diffusion non enregistrée : '+e.message)); }
   else save(LS.br,BROADCASTS);
   renderNotif();renderDiffusion();
 }
@@ -1925,35 +1983,55 @@ function handleFile(file){
   };
   if(/\.csv$/i.test(file.name))reader.readAsText(file);else reader.readAsBinaryString(file);
 }
-function applyUpload(recs){
+function applyUpload(recs,period){
+  period=period||CURRENT;
   recs.forEach(r=>{
     let v=VEHICLES.find(x=>norm(x.marque)===norm(r.marque)&&norm(x.modele)===norm(r.modele)&&norm(x.finition)===norm(r.finition));
-    if(v){v.months[CURRENT]={showroom:r.showroom,cemObs:r.cemObs};if(r.comment)v.comment=r.comment;v.fi=r.fi;v.type=r.type;delete v.statutOverride;}
+    if(v){v.months[period]={showroom:r.showroom,cemObs:r.cemObs};if(r.comment)v.comment=r.comment;v.fi=r.fi;v.type=r.type;delete v.statutOverride;}
     else VEHICLES.push({id:'up'+Math.random().toString(36).slice(2,7),marque:r.marque,modele:r.modele,motor:r.motor||'—',finition:r.finition||'(import)',
       segment:r.segment,type:r.type,fi:r.fi,catalogue:r.showroom,role:'client',statutOverride:'Nouveau',comment:r.comment||'Importé depuis fichier mensuel.',
-      months:{[CURRENT]:{showroom:r.showroom,cemObs:r.cemObs}}});
+      months:{[period]:{showroom:r.showroom,cemObs:r.cemObs}}});
   });
 }
 async function publishUpload(){
   if(!PENDING_UPLOAD)return;
   const recs=PENDING_UPLOAD, n=recs.length;
-  applyUpload(recs);
+  const sel=document.getElementById('daTarget');
+  const period=(sel&&sel.value)||workingPeriod();
+  applyUpload(recs,period);
   if(Store.LIVE){
     document.getElementById('uploadStatus').innerHTML='<div class="empty-note" style="text-align:left">Publication vers la base…</div>';
-    try{ await Store.upsertMonthly(recs); const u=await Store.getUser(); await Store.hydrate(u.id); }
+    try{
+      await Store.upsertMonthly(recs,period);
+      await Store.upsertMonth(period,'PUBLISHED',{published_at:new Date().toISOString()});
+      await Store.upsertMonth(nextPeriod(period),'DRAFT_SELECTION',{});
+      const u=await Store.getUser(); await Store.hydrate(u.id);
+    }
     catch(e){ document.getElementById('uploadStatus').innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Erreur publication : '+e.message+'</div>'; return; }
   } else {
-    save(LS.upload,recs);save(LS.uploadMeta,{when:new Date().toLocaleString('fr-FR'),count:n});
+    const ups=load(LS.upload,{})||{}; ups[period]=recs; save(LS.upload,ups); // keyed by period so reload re-applies
+    publishPeriod(period);
+    save(LS.uploadMeta,{when:new Date().toLocaleString('fr-FR'),count:n,period});
   }
   fillSelectOnce();renderAll();
-  pushBroadcast('Rapport '+MLABEL[CURRENT]+' publié',`Le tracker prix transactionnels de ${MLABEL[CURRENT]} est disponible : ${n} finition(s) mises à jour, KPI et alertes recalculés.`,'moyenne');
-  PENDING_UPLOAD=null;document.getElementById('uploadPreview').innerHTML='';document.getElementById('uploadStatus').innerHTML='<div class="empty-note" style="text-align:left;color:var(--green)">✓ Rapport publié et client notifié.</div>';
-  showToast('Rapport publié — client notifié');
+  pushBroadcast('Rapport '+(MLABEL[period]||period)+' publié',`Le tracker prix transactionnels de ${MLABEL[period]||period} est disponible : ${n} finition(s) mises à jour, KPI et alertes recalculés. Le dashboard reflète désormais ${MLABEL[period]||period}.`,'moyenne','report');
+  PENDING_UPLOAD=null;document.getElementById('uploadPreview').innerHTML='';document.getElementById('uploadStatus').innerHTML='<div class="empty-note" style="text-align:left;color:var(--green)">✓ Rapport '+(MLABEL[period]||period)+' publié et client notifié.</div>';
+  showToast('Rapport '+(MLABEL[period]||period)+' publié — mois actif avancé');
   renderDataAdmin();
 }
-function resetData(){localStorage.removeItem(LS.upload);localStorage.removeItem(LS.uploadMeta);location.reload();}
+function resetData(){[LS.upload,LS.uploadMeta,LS.cycle,LS.sel].forEach(k=>localStorage.removeItem(k));location.reload();}
 function renderDataAdmin(){
   const meta=load(LS.uploadMeta,null);
+  const sel=document.getElementById('daTarget');
+  if(sel){
+    const work=workingPeriod();
+    // offer the month being prepared + all data months (to correct a past one)
+    const opts=[...new Set([work,...MONTHS])];
+    const prev=sel.value;
+    sel.innerHTML=opts.map(p=>`<option value="${p}">${MLABEL[p]||p}${p===work?' — à préparer':''}</option>`).join('');
+    sel.value=(prev&&opts.includes(prev))?prev:work;
+  }
+  document.getElementById('daPeriod').innerText=MLABEL[CURRENT]||CURRENT;
   document.getElementById('daCount').innerText=scope(CURRENT).length;
   document.getElementById('daSource').innerText=meta?'Fichier importé':'Données xlsx d\'origine';
   document.getElementById('daLast').innerText=meta?meta.when:'—';
@@ -1975,7 +2053,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 /* ================= SELECTION M+1 ================= */
 function renderSelection(){
   const el=document.getElementById('selectionBody'); if(!el) return;
-  const period=nextPeriod(CURRENT);
+  const period=workingPeriod();
   document.getElementById('selPeriodLabel').innerText=MLABEL[period]||period;
   const row=cycleRow(period)||{status:'DRAFT_SELECTION',submittedAt:null};
   const meta=STATUS_META[row.status];
@@ -2020,7 +2098,7 @@ function importPrevSelection(){
   showToast('Sélection de '+(MLABEL[CURRENT]||CURRENT)+' importée');
 }
 async function submitSelection(){
-  const period=nextPeriod(CURRENT);
+  const period=workingPeriod();
   const ids=[...document.querySelectorAll('.selChk:checked')].map(c=>c.dataset.id);
   if(!ids.length) return showToast('Sélectionnez au moins une finition');
   if(!document.getElementById('selEngage').checked) return showToast("Veuillez cocher l'engagement");
@@ -2064,15 +2142,21 @@ function renderPilotage(){
 }
 async function advanceStatus(period,newStatus){
   const row=cycleRow(period); if(!row) return;
-  row.status=newStatus;
-  if(newStatus==='PUBLISHED') row.publishedAt=new Date().toISOString();
-  saveCycle();
-  if(Store.LIVE){
-    const patch={}; if(newStatus==='PUBLISHED') patch.published_at=row.publishedAt;
-    const dbRow=await Store.upsertMonth(period,newStatus,patch);
-    if(dbRow) row.id=dbRow.id;
+  if(newStatus==='PUBLISHED'){
+    if(!scope(period).length){ showToast('Aucune donnée pour '+(MLABEL[period]||period)+' — importez le fichier du mois avant de publier.'); return; }
+    const np=publishPeriod(period);           // marks PUBLISHED, advances CURRENT, opens next draft
+    if(Store.LIVE){
+      await Store.upsertMonth(period,'PUBLISHED',{published_at:row.publishedAt});
+      await Store.upsertMonth(np,'DRAFT_SELECTION',{});
+    }
+    pushBroadcast('Analyse '+(MLABEL[period]||period)+' publiée',`L'analyse de ${MLABEL[period]||period} est disponible : le dashboard reflète désormais ${MLABEL[period]||period}.`,'élevée','report');
+    showToast('Analyse '+(MLABEL[period]||period)+' publiée — mois actif avancé');
+    renderAll();
+    return;
   }
-  if(newStatus==='PUBLISHED') pushBroadcast('Analyse '+(MLABEL[period]||period)+' publiée',`L'analyse de ${MLABEL[period]||period} est disponible.`,'élevée');
+  row.status=newStatus;
+  saveCycle();
+  if(Store.LIVE){ const dbRow=await Store.upsertMonth(period,newStatus,{}); if(dbRow) row.id=dbRow.id; }
   showToast('Statut mis à jour : '+STATUS_META[newStatus].label);
   renderPilotage();
 }
@@ -2082,7 +2166,7 @@ let TICKETS=load(LS.tickets,[]);
 function saveTickets(){save(LS.tickets,TICKETS);}
 function fillContactPeriods(){
   const sel=document.getElementById('ctPeriod'); if(!sel) return;
-  const periods=MONTHS.concat([nextPeriod(CURRENT)]).slice().reverse();
+  const periods=[...new Set([workingPeriod(),...MONTHS])].slice().reverse();
   sel.innerHTML=periods.map(p=>`<option value="${p}">${MLABEL[p]||p}</option>`).join('');
 }
 function sendTicket(){
@@ -2115,6 +2199,7 @@ function renderSettings(){
 function saveSettings(){
   const acc=currentAccount(); if(!acc) return;
   save(LS.notif+acc.id,{sel:document.getElementById('stnSel').checked,pub:document.getElementById('stnPub').checked,alert:document.getElementById('stnAlert').checked});
+  renderNotif(); // notification prefs now gate the bell + broadcast feed
   showToast('Paramètres enregistrés');
 }
 
@@ -2192,7 +2277,7 @@ function renderControl(){
   }).join('')||'<tr><td colspan="15" style="text-align:center;color:var(--muted)">Aucune donnée</td></tr>';
 }
 function validateControl(){
-  const period=nextPeriod(CURRENT);
+  const period=workingPeriod();
   const row=cycleRow(period);
   if(row&&row.status==='QUALITY_CONTROL'){ advanceStatus(period,'READY_TO_PUBLISH'); }
   else showToast('Contrôle enregistré');
@@ -2236,6 +2321,7 @@ function renderDocs(){
 
 /* ================= INIT ================= */
 function renderAll(){
+  recomputeCalendar();
   renderKPI(); renderTopMoves(); renderTopRemises(); renderAlerts();
   renderTracked(); renderHistory(); renderCompare(); renderPriceIndex(); renderBenchmark();
   renderCatalog(); renderQuality(); renderEngineExample(); calcSimCEM(); calcSimRemise();
@@ -2255,7 +2341,10 @@ async function boot(){
     const user=await Store.getUser();
     if(user){ await enterLive(user); } else { renderLogin(); }
   } else {
-    const up=load(LS.upload,null); if(up)applyUpload(up);
+    const up=load(LS.upload,null);
+    if(Array.isArray(up)) applyUpload(up,'2026-06');                 // legacy single-array format
+    else if(up&&typeof up==='object') Object.entries(up).forEach(([p,recs])=>applyUpload(recs,p));
+    recomputeCalendar();
     fillSelectOnce();
     if(SESSION&&currentAccount()&&currentAccount().active){document.getElementById('loginGate').classList.add('hidden');bootSession();}
     else{renderLogin();}
