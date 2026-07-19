@@ -98,6 +98,20 @@ create table if not exists public.selections (
   unique (month_id, vehicle_id)
 );
 
+-- ---------- documents (proofs metadata: brochures, proformas, photos) ----------
+create table if not exists public.documents (
+  id          uuid primary key default gen_random_uuid(),
+  org         text not null default 'Auto Nejma',
+  vehicle_id  uuid references public.vehicles(id) on delete cascade,
+  period      date,
+  type        text not null default 'catalogue',   -- catalogue | proforma | photo
+  file_path   text not null,                        -- path inside the 'proofs' storage bucket
+  file_name   text not null,
+  visibility  text not null default 'client',        -- client | interne
+  uploaded_by uuid references auth.users(id),
+  created_at  timestamptz not null default now()
+);
+
 -- =====================================================================
 -- Helper: is the current user an admin?
 -- SECURITY DEFINER so it can read profiles without recursive RLS.
@@ -153,6 +167,7 @@ alter table public.broadcasts   enable row level security;
 alter table public.reads        enable row level security;
 alter table public.months       enable row level security;
 alter table public.selections   enable row level security;
+alter table public.documents    enable row level security;
 
 -- profiles: user reads own row; admin reads/writes all; user may update own basic fields.
 drop policy if exists profiles_read on public.profiles;
@@ -215,6 +230,19 @@ create policy selections_client_all on public.selections for all
   using ( exists (select 1 from public.months m where m.id = month_id and m.org = public.my_org()) )
   with check ( exists (select 1 from public.months m where m.id = month_id and m.org = public.my_org()) );
 
+-- documents: admin full; client reads/uploads its own client-visible docs for its org's vehicles.
+drop policy if exists documents_admin on public.documents;
+create policy documents_admin on public.documents for all
+  using ( public.is_admin() ) with check ( public.is_admin() );
+
+drop policy if exists documents_client_read on public.documents;
+create policy documents_client_read on public.documents for select
+  using ( visibility = 'client' and org = public.my_org() );
+
+drop policy if exists documents_client_insert on public.documents;
+create policy documents_client_insert on public.documents for insert
+  with check ( visibility = 'client' and org = public.my_org() );
+
 -- =====================================================================
 -- Storage buckets (proofs + monthly imports). Run, then set policies below.
 -- =====================================================================
@@ -228,9 +256,14 @@ create policy proofs_admin_all on storage.objects for all
   using ( bucket_id in ('proofs','imports') and public.is_admin() )
   with check ( bucket_id in ('proofs','imports') and public.is_admin() );
 
+-- client can read/upload only inside their own org's folder: proofs/<org>/...
 drop policy if exists proofs_client_read on storage.objects;
 create policy proofs_client_read on storage.objects for select
-  using ( bucket_id = 'proofs' );  -- tighten by org path prefix if needed
+  using ( bucket_id = 'proofs' and (storage.foldername(name))[1] = public.my_org() );
+
+drop policy if exists proofs_client_upload on storage.objects;
+create policy proofs_client_upload on storage.objects for insert
+  with check ( bucket_id = 'proofs' and (storage.foldername(name))[1] = public.my_org() );
 
 -- =====================================================================
 -- SEED DATA (real values from Document Excel Auto Najma.xlsx)

@@ -656,10 +656,25 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
     <section class="page" id="collection">
       <div class="grid two-even">
         <div class="card">
-          <div class="section-head"><div><h3>Collecte & justificatifs</h3><p>Saisie terrain avec preuves attachées.</p></div></div>
-          <div class="export-card"><div><h4>Brochure tarifaire</h4><p>PDF officiel constructeur ou concession.</p></div><button class="btn btn-light" onclick="showToast('Upload brochure — à brancher au stockage')">Uploader</button></div>
-          <div class="export-card"><div><h4>Proforma / devis</h4><p>Support principal du prix CEM transactionnel.</p></div><button class="btn btn-light" onclick="showToast('Upload proforma — à brancher au stockage')">Uploader</button></div>
-          <div class="export-card"><div><h4>Photo showroom</h4><p>Preuve visuelle du prix affiché.</p></div><button class="btn btn-light" onclick="showToast('Upload photo — à brancher au stockage')">Uploader</button></div>
+          <div class="section-head"><div><h3>Collecte & justificatifs</h3><p>Attachez un fichier à une finition — brochure, proforma ou photo showroom.</p></div></div>
+          <label class="fl">Finition</label>
+          <select class="field" style="width:100%;margin-bottom:10px" id="ulVehicle"></select>
+          <div class="grid two-even" style="gap:10px;margin-bottom:10px">
+            <div><label class="fl">Type de document</label>
+              <select class="field" style="width:100%" id="ulType"><option value="catalogue">Brochure tarifaire</option><option value="proforma">Proforma / devis</option><option value="photo">Photo showroom</option></select>
+            </div>
+            <div id="ulVisWrap"><label class="fl">Visibilité</label>
+              <select class="field" style="width:100%" id="ulVisibility"><option value="client">Client (Auto Nejma)</option><option value="interne">Interne Valyn uniquement</option></select>
+            </div>
+          </div>
+          <input type="file" id="ulFile" style="display:none" accept=".pdf,.jpg,.jpeg,.png" onchange="handleProofFile(this.files[0])">
+          <div class="upload-zone" onclick="document.getElementById('ulFile').click()" style="padding:16px">
+            <div style="font-size:26px">⬆</div>
+            <strong style="display:block;margin:6px 0 2px" id="ulFileName">Déposer ou choisir un fichier (PDF, JPG, PNG)</strong>
+          </div>
+          <button class="btn btn-primary" style="margin-top:12px" onclick="uploadProofDocument()">Attacher le document</button>
+          <h4 style="margin:18px 0 8px">Derniers documents attachés</h4>
+          <div id="collectionDocs" style="display:grid;gap:8px"></div>
         </div>
         <div class="card">
           <div class="section-head"><div><h3>Saisie rapide — ajoute au tracker</h3><p>Enregistre une observation Juin 2026 : elle est recalculée et injectée dans le dashboard.</p></div></div>
@@ -861,7 +876,7 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
           </table>
         </div>
         <div class="empty-note" style="text-align:left;margin-top:14px">
-          Le stockage de fichiers n'est pas encore branché (voir <strong>Collecte & preuves</strong>). Cette page reflète les commentaires et justificatifs déjà saisis sur chaque finition.
+          Les documents sont attachés depuis <strong>Collecte & preuves</strong>. Un document "Interne" reste invisible pour Auto Nejma.
         </div>
       </div>
     </section>
@@ -881,11 +896,7 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
   <h4 style="margin-top:20px">Décomposition de la remise (mois courant)</h4>
   <div class="breakdown" id="hpBreakdown"></div>
   <h4 style="margin-top:20px">Justificatifs attachés</h4>
-  <div class="doc-list">
-    <div class="doc">Brochure tarifaire PDF <button class="btn btn-ghost btn-sm" onclick="openModal('proofModal')">Voir</button></div>
-    <div class="doc">Proforma concession <button class="btn btn-ghost btn-sm" onclick="openModal('proofModal')">Voir</button></div>
-    <div class="doc">Photo showroom <button class="btn btn-ghost btn-sm" onclick="openModal('proofModal')">Voir</button></div>
-  </div>
+  <div class="doc-list" id="hpDocs"></div>
   <h4 style="margin-top:20px">Commentaire terrain</h4>
   <p id="hpComment" style="color:var(--muted);line-height:1.55"></p>
 </aside>
@@ -1146,6 +1157,7 @@ function fillSelectOnce(){
   document.getElementById('trackedSeg').innerHTML='<option value="">Tous segments</option>'+segs.map(s=>`<option>${s}</option>`).join('');
   const hist=document.getElementById('histSel');
   hist.innerHTML=VEHICLES.filter(v=>Object.keys(v.months).length>1).map(v=>`<option value="${v.id}">${v.marque} ${v.modele} ${v.finition}</option>`).join('');
+  fillUploadVehicles();
 }
 function statutChip(s){
   const map={'Suivi':'chip-ok','Nouveau':'chip-new','Alerte':'chip-alert','Hors scope':'chip-muted','Arrêtée':'chip-muted','À vérifier':'chip-track'};
@@ -1173,7 +1185,7 @@ function renderTracked(){
       <td class="num"><strong>${fmt(c.CEM)}</strong></td>
       <td class="num ${ixCls}">${ix==null?'—':ix.toFixed(0)}</td>
       <td><span style="font-size:11.5px">${lectureRemise(c)}</span></td>
-      <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openModal('proofModal')">Voir</button></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openProof('${v.id}')">Voir</button></td>
     </tr>`;
   }).join('');
 }
@@ -1221,6 +1233,9 @@ function openHistory(id){
   document.getElementById('hpSpark').innerHTML=sparkSVG([s.cem,s.show],['#f47b20','#111827']);
   document.getElementById('hpBreakdown').innerHTML=breakdownHTML(e);
   document.getElementById('hpComment').innerText=v.comment||'—';
+  const vDocs=visibleDocs().filter(d=>d.vehicleId===id);
+  const typeLabel={catalogue:'Brochure tarifaire',proforma:'Proforma / devis',photo:'Photo showroom'};
+  document.getElementById('hpDocs').innerHTML=vDocs.length?vDocs.map(d=>`<div class="doc">${typeLabel[d.type]||d.type} · ${d.name} <button class="btn btn-ghost btn-sm" onclick="openProof('${id}','${d.type}')">Voir</button></div>`).join(''):'<div class="doc" style="color:var(--muted)">Aucun justificatif attaché — <button class="btn btn-ghost btn-sm" onclick="go(\'collection\')">joindre un document</button></div>';
   document.getElementById('historyPanel').classList.add('open');
   document.getElementById('overlay').classList.add('open');
 }
@@ -1428,6 +1443,70 @@ function addObservation(){
   ['ob_name','ob_brand','ob_seg','ob_show','ob_cem'].forEach(i=>document.getElementById(i).value='');
 }
 
+/* ================= PROOFS / DOCUMENTS ================= */
+let PENDING_PROOF_FILE=null;
+function handleProofFile(file){
+  PENDING_PROOF_FILE=file||null;
+  document.getElementById('ulFileName').innerText=file?file.name:'Déposer ou choisir un fichier (PDF, JPG, PNG)';
+}
+function fillUploadVehicles(){
+  const sel=document.getElementById('ulVehicle'); if(!sel) return;
+  sel.innerHTML=VEHICLES.map(v=>`<option value="${v.id}">${v.marque} ${v.modele} ${v.finition}</option>`).join('');
+  const wrap=document.getElementById('ulVisWrap');
+  const acc=currentAccount();
+  if(wrap) wrap.style.display=(acc&&acc.role==='admin')?'':'none';
+}
+async function uploadProofDocument(){
+  const vehicleId=document.getElementById('ulVehicle').value;
+  const type=document.getElementById('ulType').value;
+  const acc=currentAccount();
+  const visibility=(acc&&acc.role==='admin')?document.getElementById('ulVisibility').value:'client';
+  if(!vehicleId||!PENDING_PROOF_FILE) return showToast('Choisissez une finition et un fichier');
+  const org=CFG.org||'Auto Nejma';
+  const path=`${org}/${vehicleId}/${type}-${Date.now()}-${PENDING_PROOF_FILE.name}`;
+  const doc={id:'doc'+Date.now(),vehicleId,period:CURRENT,type,path,name:PENDING_PROOF_FILE.name,visibility,createdAt:new Date().toISOString()};
+  if(Store.LIVE){
+    const ok=await Store.uploadProof(path,PENDING_PROOF_FILE);
+    if(!ok) return showToast('Échec de l\'envoi — réessayez');
+    const saved=await Store.saveDocument(doc);
+    if(saved) doc.id=saved.id;
+  } else {
+    doc.url=URL.createObjectURL(PENDING_PROOF_FILE); // demo-only, lost on reload
+  }
+  DOCUMENTS.unshift(doc);
+  PENDING_PROOF_FILE=null;
+  document.getElementById('ulFile').value='';
+  document.getElementById('ulFileName').innerText='Déposer ou choisir un fichier (PDF, JPG, PNG)';
+  showToast('Document attaché');
+  renderCollectionDocs(); renderDocs();
+}
+function visibleDocs(){
+  const acc=currentAccount();
+  return (acc&&acc.role==='admin')?DOCUMENTS:DOCUMENTS.filter(d=>d.visibility==='client');
+}
+function renderCollectionDocs(){
+  const el=document.getElementById('collectionDocs'); if(!el) return;
+  const recent=visibleDocs().slice(0,6);
+  el.innerHTML=recent.length?recent.map(d=>{
+    const v=VEHICLES.find(x=>x.id===d.vehicleId);
+    const typeLabel={catalogue:'Brochure',proforma:'Proforma',photo:'Photo'}[d.type]||d.type;
+    return `<div class="doc">${typeLabel} · ${v?v.marque+' '+v.modele+' '+v.finition:'—'} — ${d.name} <button class="btn btn-ghost btn-sm" onclick="openProof('${d.vehicleId}','${d.type}')">Voir</button></div>`;
+  }).join(''):'<div class="empty-note">Aucun document attaché pour le moment.</div>';
+}
+async function openProof(vehicleId,type){
+  const pool=visibleDocs();
+  const doc=type?pool.find(d=>d.vehicleId===vehicleId&&d.type===type):pool.find(d=>d.vehicleId===vehicleId);
+  if(!doc){ openModal('proofModal'); return; }
+  if(Store.LIVE){
+    const url=await Store.getProofUrl(doc.path);
+    if(url) window.open(url,'_blank'); else showToast('Document indisponible');
+  } else if(doc.url){
+    window.open(doc.url,'_blank');
+  } else {
+    openModal('proofModal');
+  }
+}
+
 /* ================= EXPORTS ================= */
 function download(name, text, mime='text/csv'){
   const blob=new Blob(['﻿'+text],{type:mime+';charset=utf-8'});
@@ -1494,6 +1573,7 @@ document.querySelectorAll(".nav-link").forEach(btn=>{
 });
 function openModal(id){ document.getElementById(id).classList.add("open"); document.getElementById("overlay").classList.add("open"); }
 function closePanels(){ document.getElementById("historyPanel").classList.remove("open"); document.getElementById("notifPanel").classList.remove("open"); document.getElementById("profileMenu").classList.remove("open"); document.querySelectorAll(".modal").forEach(m=>m.classList.remove("open")); document.getElementById("overlay").classList.remove("open"); }
+function go(id){ closePanels(); const l=document.querySelector(`.nav-link[data-page="${id}"]`); if(l) l.click(); }
 function showToast(msg){ const t=document.getElementById("toast"); t.innerText=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2600); }
 function runAnalysis(){ renderAll(); showToast("Analyse recalculée : KPI, alertes, benchmark et exports à jour"); document.querySelectorAll(".kpi .value").forEach(k=>k.animate([{transform:"scale(1)"},{transform:"scale(1.06)"},{transform:"scale(1)"}],{duration:500})); }
 
@@ -1534,14 +1614,15 @@ const Store = {
     return Object.values(by);
   },
   async hydrate(uid){
-    const [{data:profs},{data:vs},{data:md},{data:brs},{data:rd},{data:mo},{data:sels}] = await Promise.all([
+    const [{data:profs},{data:vs},{data:md},{data:brs},{data:rd},{data:mo},{data:sels},{data:docs}] = await Promise.all([
       this.sb.from('profiles').select('*').order('created_at'),
       this.sb.from('vehicles').select('*'),
       this.sb.from('monthly_data').select('*'),
       this.sb.from('broadcasts').select('*').order('created_at'),
       this.sb.from('reads').select('broadcast_id').eq('user_id',uid),
       this.sb.from('months').select('*').order('period'),
-      this.sb.from('selections').select('*')
+      this.sb.from('selections').select('*'),
+      this.sb.from('documents').select('*').order('created_at',{ascending:false})
     ]);
     ACCOUNTS = (profs||[]).map(p=>this._profToAcc(p));
     const built = this._rowsToVehicles(vs||[], md||[]);
@@ -1553,6 +1634,7 @@ const Store = {
       SELECTIONS = {};
       (sels||[]).forEach(s=>{ const row=mo.find(m=>m.id===s.month_id); if(!row)return; const p=String(row.period).slice(0,7); (SELECTIONS[p]=SELECTIONS[p]||[]).push(s.vehicle_id); });
     }
+    DOCUMENTS = (docs||[]).map(d=>({id:d.id,vehicleId:d.vehicle_id,period:d.period?String(d.period).slice(0,7):null,type:d.type,path:d.file_path,name:d.file_name,visibility:d.visibility,createdAt:d.created_at}));
   },
   async persistAccount(a){ if(!this.sb)return; await this.sb.from('profiles').update({name:a.name,org:a.org,role:a.role,active:a.active,rights:a.rights}).eq('id',a.id); },
   async pushBroadcast(b){ if(!this.sb)return null; const {data}=await this.sb.from('broadcasts').insert({org:this.org,title:b.title,body:b.body,priority:b.priority,from_name:'Valyn Advisory'}).select().single(); return data; },
@@ -1584,6 +1666,23 @@ const Store = {
       {org:this.org,marque:v.marque,modele:v.modele,motor:v.motor,finition:v.finition,segment:v.segment,type:v.type,fi:v.fi,catalogue:v.catalogue,vrole:v.role,comment:v.comment||'',status_override:v.statutOverride||null},
       {onConflict:'org,marque,modele,finition'}).select().single();
     return data;
+  },
+  async uploadProof(path,file){
+    if(!this.sb)return false;
+    const {error}=await this.sb.storage.from('proofs').upload(path,file,{upsert:true});
+    return !error;
+  },
+  async getProofUrl(path){
+    if(!this.sb)return null;
+    const {data}=await this.sb.storage.from('proofs').createSignedUrl(path,3600);
+    return data?data.signedUrl:null;
+  },
+  async saveDocument(doc){
+    if(!this.sb)return null;
+    const {data}=await this.sb.from('documents').insert(
+      {org:this.org,vehicle_id:doc.vehicleId,period:doc.period?doc.period+'-01':null,type:doc.type,file_path:doc.path,file_name:doc.name,visibility:doc.visibility}
+    ).select().single();
+    return data;
   }
 };
 
@@ -1598,6 +1697,7 @@ function defaultCycle(){
 }
 let CYCLE=load(LS.cycle,null)||defaultCycle();
 let SELECTIONS=load(LS.sel,{});
+let DOCUMENTS=[]; // demo mode: in-memory only (object URLs don't survive reload); live mode: loaded in Store.hydrate()
 function saveCycle(){save(LS.cycle,CYCLE);}
 function saveSelections(){save(LS.sel,SELECTIONS);}
 function cycleRow(period){return CYCLE.find(m=>m.period===period&&m.org===(CFG.org||'Auto Nejma'));}
@@ -2121,8 +2221,11 @@ function renderCoherence(){
 /* ================= DOCS (Valyn) ================= */
 function renderDocs(){
   const el=document.getElementById('docsBody'); if(!el) return;
-  const rows=VEHICLES.filter(v=>v.comment);
-  el.innerHTML=rows.length?rows.map(v=>`<tr><td>${MLABEL[CURRENT]||CURRENT}</td><td>${v.marque} ${v.modele} ${v.finition}</td><td>Commentaire</td><td>—</td><td><span class="chip chip-muted">Non joint</span></td><td>${v.role==='catalog'?'Interne':'Client'}</td></tr>`).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted)">Aucun document</td></tr>';
+  const typeLabel={catalogue:'Brochure',proforma:'Proforma',photo:'Photo'};
+  el.innerHTML=DOCUMENTS.length?DOCUMENTS.map(d=>{
+    const v=VEHICLES.find(x=>x.id===d.vehicleId);
+    return `<tr><td>${MLABEL[d.period]||d.period||'—'}</td><td>${v?v.marque+' '+v.modele+' '+v.finition:'—'}</td><td>${typeLabel[d.type]||d.type}</td><td>${d.name} <button class="btn btn-ghost btn-sm" onclick="openProof('${d.vehicleId}','${d.type}')">Ouvrir</button></td><td><span class="chip chip-ok">Joint</span></td><td>${d.visibility==='interne'?'<span class="chip chip-muted">Interne</span>':'<span class="chip chip-seg">Client</span>'}</td></tr>`;
+  }).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted)">Aucun document — voir Collecte & preuves</td></tr>';
 }
 
 /* ================= INIT ================= */
@@ -2132,7 +2235,7 @@ function renderAll(){
   renderCatalog(); renderQuality(); renderEngineExample(); calcSimCEM(); calcSimRemise();
   renderUsers(); renderDiffusion(); renderDataAdmin(); renderNotif();
   renderSelection(); renderPilotage();
-  renderTickets(); renderSettings(); renderVdash(); renderMaster(); renderControl(); renderCoherence(); renderDocs();
+  renderTickets(); renderSettings(); renderVdash(); renderMaster(); renderControl(); renderCoherence(); renderDocs(); renderCollectionDocs();
 }
 function bootSession(){
   const acc=currentAccount();
