@@ -1767,7 +1767,8 @@ function applyRights(){
   const isAdmin=acc.role==='admin';
   document.querySelectorAll('.nav-link').forEach(l=>{
     const cap=l.dataset.cap;let ok;
-    if(l.dataset.admin==='1')ok=isAdmin&&acc.rights[cap];
+    if(cap==='contact')ok=!isAdmin&&!!acc.rights[cap]; // Auto Nejma contacts Valyn, not the reverse
+    else if(l.dataset.admin==='1')ok=isAdmin&&acc.rights[cap];
     else ok=isAdmin||!!acc.rights[cap];
     l.style.display=ok?'':'none';
   });
