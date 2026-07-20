@@ -1527,22 +1527,32 @@ function download(name, text, mime='text/csv'){
   const blob=new Blob(['﻿'+text],{type:mime+';charset=utf-8'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
 }
+// Mirrors the Finitions trackées table's active filters, so the export matches what's on screen.
+function trackedFiltered(){
+  const q=(document.getElementById('trackedSearch').value||'').toLowerCase();
+  const fb=document.getElementById('trackedBrand').value, fs=document.getElementById('trackedSeg').value;
+  return scope(CURRENT).filter(v=>{
+    const s=`${v.marque} ${v.modele} ${v.finition} ${v.segment}`.toLowerCase();
+    return s.includes(q)&&(!fb||v.marque===fb)&&(!fs||v.segment===fs);
+  });
+}
 function exportCSV(){
   const H=['Marque','Modele','Motorisation','Finition','Segment','Type','Prix showroom TTC','Prix showroom HT','Remise %','Remise HT','Prix remise HT','Prix remise TTC','Taxe luxe %','Taxe luxe','Frais immat','Prix CEM','Remise fiscale','Remise commerciale reelle','Remise fiscale %','Remise commerciale %','Indice segment','Lecture'];
-  const rows=scope(CURRENT).map(v=>{ const e=vehMonth(v,CURRENT).e; const ix=indice(v,CURRENT);
+  const rows=trackedFiltered().map(v=>{ const e=vehMonth(v,CURRENT).e; const ix=indice(v,CURRENT);
     return [v.marque,v.modele,v.motor,v.finition,v.segment,v.type,e.pvpTTC,Math.round(e.K),(e.remise*100).toFixed(2),Math.round(e.remiseHT),Math.round(e.P),Math.round(e.Q),(e.R*100).toFixed(0),Math.round(e.S),e.fi,Math.round(e.CEM),Math.round(e.Y),Math.round(e.Z),(e.AA*100).toFixed(2),(e.AB*100).toFixed(2),ix?ix.toFixed(1):'',lectureRemise(e)];
   });
   const csv=[H,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
-  download('AutoNejma_Analyse_Juin2026.csv',csv); showToast('Fichier maître Excel (CSV) téléchargé');
+  download(`AutoNejma_Analyse_${(MLABEL[CURRENT]||CURRENT).replace(/\s/g,'')}.csv`,csv); showToast('Fichier maître Excel (CSV) téléchargé — vue filtrée');
 }
 function exportCompareCSV(){
   const H=['Finition','Segment','Showroom M-1','Showroom M','Delta Showroom %','Remise M-1 %','Remise M %','Delta Remise pt','CEM M-1','CEM M','Delta CEM %','Tag'];
-  const rows=VEHICLES.filter(v=>vehMonth(v,CURRENT)&&vehMonth(v,PREV)&&vehMonth(v,CURRENT).e&&vehMonth(v,PREV).e).map(v=>{
+  const filteredIds=new Set(trackedFiltered().map(v=>v.id));
+  const rows=VEHICLES.filter(v=>filteredIds.has(v.id)&&vehMonth(v,CURRENT)&&vehMonth(v,PREV)&&vehMonth(v,CURRENT).e&&vehMonth(v,PREV).e).map(v=>{
     const m=vehMonth(v,CURRENT).e,p=vehMonth(v,PREV).e; const dShow=(m.pvpTTC-p.pvpTTC)/p.pvpTTC,dRem=m.remise-p.remise,dCem=(m.CEM-p.CEM)/p.CEM;
     return [`${v.modele} ${v.finition}`,v.segment,p.pvpTTC,m.pvpTTC,(dShow*100).toFixed(1),(p.remise*100).toFixed(1),(m.remise*100).toFixed(1),(dRem*100).toFixed(1),Math.round(p.CEM),Math.round(m.CEM),(dCem*100).toFixed(2),tag(dCem,dShow,dRem).t];
   });
   const csv=[H,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
-  download('AutoNejma_Comparatif_Juin_vs_Mai_2026.csv',csv); showToast('Comparatif M/M-1 téléchargé');
+  download(`AutoNejma_Comparatif_${(MLABEL[CURRENT]||CURRENT).replace(/\s/g,'')}_vs_${(MLABEL[PREV]||PREV).replace(/\s/g,'')}.csv`,csv); showToast('Comparatif M/M-1 téléchargé — vue filtrée');
 }
 
 /* ================= NAV / MISC ================= */
