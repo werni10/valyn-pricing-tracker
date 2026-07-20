@@ -4,20 +4,20 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Valyn Advisory — Auto Nejma · Tracker Prix Transactionnels</title>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <style>
   :root{
     --black:#0b0f17;--black2:#111827;--ink:#151922;
-    --orange:#f47b20;--orange2:#ff9a4d;--cream:#fff7ef;
-    --bg:#f5f6f8;--card:#ffffff;--line:#e6e8ee;--muted:#697386;
+    --orange:#f47b20;--orange2:#ff9a4d;--cream:#fff7ef;--focus:#c2410c;
+    --bg:#f5f6f8;--card:#ffffff;--line:#e6e8ee;--muted:#636d80;
     --green:#18a058;--red:#d92d20;--blue:#2563eb;--purple:#7c3aed;--amber:#d97706;
     --shadow-soft:0 24px 70px rgba(15,23,42,.09);
     --shadow-card:0 12px 35px rgba(15,23,42,.07);
     --radius-xl:26px;--radius-lg:18px;--radius-md:13px;
   }
   *{box-sizing:border-box}
+  :focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
   html{scroll-behavior:smooth}
   body{
     margin:0;
@@ -69,6 +69,11 @@
   .btn-light{background:white;color:#111;border:1px solid var(--line)}
   .btn-ghost{background:#f9fafb;color:#111;border:1px solid var(--line)}
   .btn-sm{padding:7px 11px;font-size:12px;border-radius:11px}
+  @media (pointer:coarse){
+    .btn-sm{padding:11px 14px;min-height:40px}
+    .close{width:44px;height:44px}
+    .info-dot{width:22px;height:22px;font-size:12px}
+  }
   .page{display:none;animation:fade .22s ease}
   .page.active{display:block}
   @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
@@ -77,26 +82,30 @@
   .two-col{grid-template-columns:1.5fr .85fr}
   .three-col{grid-template-columns:repeat(3,minmax(0,1fr))}
   .two-even{grid-template-columns:1fr 1fr}
-  .card{background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border:1px solid rgba(230,232,238,.9);border-radius:var(--radius-xl);box-shadow:var(--shadow-soft);padding:20px;min-width:0}
+  .card{background:var(--card);border:1px solid rgba(230,232,238,.9);border-radius:var(--radius-xl);box-shadow:var(--shadow-soft);padding:20px;min-width:0}
   .card.compact{padding:16px;border-radius:20px}
   .section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:15px}
   .section-head h3{margin:0;font-size:18px;letter-spacing:-.025em}
   .section-head p{margin:5px 0 0;color:var(--muted);font-size:13px;line-height:1.4}
   .section-head .right-note{color:var(--muted);font-size:12px;font-weight:800;white-space:nowrap}
-  .kpi{position:relative;overflow:hidden;min-height:140px}
-  .kpi:after{content:"";position:absolute;right:-38px;top:-38px;width:110px;height:110px;border-radius:50%;background:rgba(244,123,32,.12)}
+  .kpi{position:relative;min-height:140px}
   .kpi .label{color:var(--muted);font-size:12px;font-weight:850;text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:6px}
   .kpi .value{font-size:30px;font-weight:950;letter-spacing:-.045em;margin:14px 0 8px}
   .kpi .trend{font-size:13px;font-weight:850}
+  .kpi .spark{height:36px;margin:2px 0 0;border:0;background:none}
   .green{color:var(--green)}.red{color:var(--red)}.blue{color:var(--blue)}.amber{color:var(--amber)}.purple{color:var(--purple)}
   .info-dot{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:50%;background:#eef2f7;color:#334155;font-size:11px;font-weight:950;cursor:help;border:1px solid #dde3ec;position:relative;flex:0 0 auto;vertical-align:middle}
-  .info-dot:hover{background:var(--orange);color:#111;border-color:var(--orange)}
-  .info-dot:hover::after{content:attr(data-tip);position:absolute;z-index:100;min-width:230px;max-width:330px;bottom:24px;left:50%;transform:translateX(-50%);background:#0b0f17;color:white;padding:10px 11px;border-radius:12px;font-size:12px;line-height:1.45;font-weight:650;box-shadow:0 16px 35px rgba(0,0,0,.25);text-align:left;white-space:normal}
+  .info-dot:hover,.info-dot.open,.info-dot:focus-visible{background:var(--orange);color:#111;border-color:var(--orange)}
+  .info-dot:hover::after,.info-dot.open::after,.info-dot:focus-visible::after{content:attr(data-tip);position:absolute;z-index:100;min-width:230px;max-width:330px;bottom:24px;left:50%;transform:translateX(-50%);background:#0b0f17;color:white;padding:10px 11px;border-radius:12px;font-size:12px;line-height:1.45;font-weight:650;box-shadow:0 16px 35px rgba(0,0,0,.25);text-align:left;white-space:normal}
   .table-wrap{overflow:auto;border-radius:18px;border:1px solid var(--line);background:white}
   table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;min-width:900px}
   th,td{padding:12px 12px;border-bottom:1px solid #eef0f4;text-align:left;vertical-align:middle}
   th{background:#fbfbfc;color:#5f6879;font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-weight:950;position:sticky;top:0;z-index:2;white-space:nowrap}
   tr:last-child td{border-bottom:0}
+  th:first-child,td:first-child{position:sticky;left:0;z-index:1;background:inherit}
+  th:first-child{z-index:3;background:#fbfbfc}
+  td:first-child{background:white}
+  tbody tr.clk:hover td:first-child{background:#fff8f1}
   tbody tr.clk{cursor:pointer;transition:.16s ease}
   tbody tr.clk:hover{background:#fff8f1}
   td strong{font-weight:900}
@@ -380,15 +389,15 @@
         <div class="table-wrap">
           <table id="trackedTable">
             <thead><tr>
-              <th>Finition <span class="info-dot" data-tip="Identifiant unique : marque + modèle + motorisation + finition.">i</span></th>
+              <th>Finition <span class="info-dot" tabindex="0" data-tip="Identifiant unique : marque + modèle + motorisation + finition.">i</span></th>
               <th>Segment</th>
               <th>Statut</th>
-              <th class="num">Prix showroom TTC <span class="info-dot" data-tip="Prix affiché showroom / brochure, toutes taxes comprises.">i</span></th>
-              <th class="num">Remise % <span class="info-dot" data-tip="Remise totale sur prix HT (showroom → remisé).">i</span></th>
-              <th class="num">Remise comm. réelle <span class="info-dot" data-tip="Part purement commerciale de la remise, hors optimisation de la taxe de luxe.">i</span></th>
-              <th class="num">Taxe luxe <span class="info-dot" data-tip="Taxe proportionnelle marocaine appliquée au prix remisé HT (thermique).">i</span></th>
-              <th class="num">Prix CEM <span class="info-dot" data-tip="Prix clé en main = remisé TTC + (frais immat + taxe luxe) × 1,2.">i</span></th>
-              <th class="num">Indice segment <span class="info-dot" data-tip="CEM vs moyenne CEM du segment (100 = moyenne).">i</span></th>
+              <th class="num">Prix showroom TTC <span class="info-dot" tabindex="0" data-tip="Prix affiché showroom / brochure, toutes taxes comprises.">i</span></th>
+              <th class="num">Remise % <span class="info-dot" tabindex="0" data-tip="Remise totale sur prix HT (showroom → remisé).">i</span></th>
+              <th class="num">Remise comm. réelle <span class="info-dot" tabindex="0" data-tip="Part purement commerciale de la remise, hors optimisation de la taxe de luxe.">i</span></th>
+              <th class="num">Taxe luxe <span class="info-dot" tabindex="0" data-tip="Taxe proportionnelle marocaine appliquée au prix remisé HT (thermique).">i</span></th>
+              <th class="num">Prix CEM <span class="info-dot" tabindex="0" data-tip="Prix clé en main = remisé TTC + (frais immat + taxe luxe) × 1,2.">i</span></th>
+              <th class="num">Indice segment <span class="info-dot" tabindex="0" data-tip="CEM vs moyenne CEM du segment (100 = moyenne).">i</span></th>
               <th>Lecture remise</th>
               <th>Preuve</th>
             </tr></thead>
@@ -1100,17 +1109,19 @@ function renderKPI(){
   const alerts = buildAlerts();
   const aggr = sc.filter(v=>vehMonth(v,CURRENT).e.AB>0.08).length;
   const cemDelta = (cemAvg-cemAvgPrev)/cemAvgPrev*100;
+  const cemSeries = MONTHS.map(m=>{ const s=scope(m); return s.length? s.reduce((a,v)=>a+vehMonth(v,m).e.CEM,0)/s.length : null; });
   const kpis = [
     {lab:'Finitions suivies', tip:'Finitions Auto Nejma avec données calculables sur le mois courant.', val:sc.length, trend:`+${newCount} nouvelle(s) vs M-1`, cls:'blue'},
     {lab:'Remise totale moyenne', tip:'Moyenne des remises totales (fiscale + commerciale) sur prix HT.', val:fmtP(remTotAvg), trend:`dont ${fmtP(remAvg)} commerciale réelle`, cls:'amber'},
-    {lab:'Prix CEM moyen', tip:'Prix clé en main moyen des finitions suivies.', val:fmtK(cemAvg), trend:`${cemDelta>=0?'+':''}${cemDelta.toFixed(1)} % vs M-1`, cls: cemDelta<=0?'green':'red'},
+    {lab:'Prix CEM moyen', tip:'Prix clé en main moyen des finitions suivies.', val:fmtK(cemAvg), trend:`${cemDelta>=0?'+':''}${cemDelta.toFixed(1)} % vs M-1`, cls: cemDelta<=0?'green':'red', spark:cemSeries},
     {lab:'Alertes détectées', tip:'Signaux pricing/fiscaux générés par le moteur.', val:alerts.length, trend:`${aggr} remise(s) commerciale(s) > 8 %`, cls:'amber'}
   ];
   document.getElementById('kpiRow').innerHTML = kpis.map(k=>`
     <div class="card kpi">
-      <div class="label">${k.lab} <span class="info-dot" data-tip="${k.tip}">i</span></div>
+      <div class="label">${k.lab} <span class="info-dot" tabindex="0" data-tip="${k.tip}">i</span></div>
       <div class="value">${k.val}</div>
       <div class="trend ${k.cls}">${k.trend}</div>
+      ${k.spark?`<div class="spark">${sparkSVG([k.spark],['#f47b20'],140,36,4)}</div>`:''}
     </div>`).join('');
 }
 function renderTopMoves(){
@@ -1182,7 +1193,7 @@ function renderTracked(){
   document.getElementById('trackedBody').innerHTML=list.map(v=>{
     const c=vehMonth(v,CURRENT).e; const st=statut(v,CURRENT); const ix=indice(v,CURRENT);
     const ixCls = ix==null?'':(ix>100?'red':'green');
-    return `<tr class="clk" onclick="openHistory('${v.id}')">
+    return `<tr class="clk" tabindex="0" role="button" aria-label="Ouvrir l'historique de ${v.modele} ${v.finition}" onclick="openHistory('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHistory('${v.id}')}">
       <td><strong>${v.modele} ${v.finition}</strong><br><span style="color:var(--muted);font-size:11px">${v.marque} · ${v.motor}</span></td>
       <td><span class="chip chip-seg">${v.segment}</span></td>
       <td>${statutChip(st)}</td>
@@ -1825,6 +1836,18 @@ async function logout(){ if(Store.LIVE) await Store.signOut(); SESSION=null;loca
 function toggleProfileMenu(e){e.stopPropagation();document.getElementById('profileMenu').classList.toggle('open');}
 document.addEventListener('click',()=>document.getElementById('profileMenu').classList.remove('open'));
 
+// info-dot tooltips: tap-to-toggle (touch has no :hover) and keyboard-operable (Enter/Space)
+document.addEventListener('click',e=>{
+  const dot=e.target.closest('.info-dot');
+  document.querySelectorAll('.info-dot.open').forEach(d=>{ if(d!==dot) d.classList.remove('open'); });
+  if(dot){ e.stopPropagation(); dot.classList.toggle('open'); }
+});
+document.addEventListener('keydown',e=>{
+  if((e.key==='Enter'||e.key===' ')&&e.target.classList&&e.target.classList.contains('info-dot')){
+    e.preventDefault(); e.target.classList.toggle('open');
+  }
+});
+
 /* ---- rights enforcement ---- */
 function applyRights(){
   const acc=currentAccount();if(!acc)return;
@@ -1972,10 +1995,27 @@ function rowsToRecords(rows){
   return recs;
 }
 let PENDING_UPLOAD=null;
-function handleFile(file){
+let xlsxLoadPromise=null;
+// SheetJS is ~1MB; only admins touch xlsx import, and CSV never needs it — load on first real use.
+function ensureXLSX(){
+  if(window.XLSX) return Promise.resolve();
+  if(xlsxLoadPromise) return xlsxLoadPromise;
+  xlsxLoadPromise=new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    s.onload=()=>resolve(); s.onerror=()=>reject(new Error('xlsx load failed'));
+    document.head.appendChild(s);
+  });
+  return xlsxLoadPromise;
+}
+async function handleFile(file){
   if(!file)return;
   const status=document.getElementById('uploadStatus');
   status.innerHTML='<div class="empty-note" style="text-align:left">Lecture du fichier…</div>';
+  if(!/\.csv$/i.test(file.name)){
+    try{ await ensureXLSX(); }
+    catch(e){ status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Librairie xlsx non chargée (hors ligne). Utilisez le modèle CSV.</div>'; return; }
+  }
   const reader=new FileReader();
   reader.onload=e=>{
     try{
@@ -1983,7 +2023,6 @@ function handleFile(file){
       if(/\.csv$/i.test(file.name)){
         rows=String(e.target.result).split(/\r?\n/).filter(l=>l.trim()).map(l=>l.split(/;|,\t|\t/).length>1?l.split(/;|\t/):l.split(','));
       } else {
-        if(typeof XLSX==='undefined'){status.innerHTML='<div class="empty-note red" style="text-align:left;color:var(--red)">Librairie xlsx non chargée (hors ligne). Utilisez le modèle CSV.</div>';return;}
         const wb=XLSX.read(e.target.result,{type:'binary'});
         // prefer a sheet whose name suggests input data, else first with enough columns
         let sn=wb.SheetNames.find(n=>/input|collecte|saisie|data/i.test(n))||wb.SheetNames[0];
