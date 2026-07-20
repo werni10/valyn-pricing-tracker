@@ -1671,6 +1671,10 @@ const Store = {
     const {data}=await this.sb.from('months').upsert({org:this.org,period:period+'-01',status,...extra},{onConflict:'org,period'}).select().single();
     return data;
   },
+  async archiveOlderPublished(period){
+    if(!this.sb)return;
+    await this.sb.from('months').update({status:'ARCHIVED'}).eq('org',this.org).eq('status','PUBLISHED').lt('period',period+'-01');
+  },
   async saveSelection(monthId,vehicleIds){
     if(!this.sb)return;
     await this.sb.from('selections').delete().eq('month_id',monthId);
@@ -1744,6 +1748,8 @@ function publishPeriod(period){
   let row=cycleRow(period);
   if(!row){ row={period,org,status:'PUBLISHED',submittedAt:null,publishedAt:null}; CYCLE.push(row); }
   row.status='PUBLISHED'; row.publishedAt=row.publishedAt||new Date().toISOString();
+  // only the newest published month stays "PUBLISHED" — older ones are superseded and archived
+  CYCLE.filter(m=>m.org===org&&m.status==='PUBLISHED'&&m.period!==period&&m.period<period).forEach(m=>m.status='ARCHIVED');
   const np=nextPeriod(period);
   if(!cycleRow(np)) CYCLE.push({period:np,org,status:'DRAFT_SELECTION',submittedAt:null,publishedAt:null});
   saveCycle(); recomputeCalendar();
@@ -2004,6 +2010,7 @@ async function publishUpload(){
     try{
       await Store.upsertMonthly(recs,period);
       await Store.upsertMonth(period,'PUBLISHED',{published_at:new Date().toISOString()});
+      await Store.archiveOlderPublished(period);
       await Store.upsertMonth(nextPeriod(period),'DRAFT_SELECTION',{});
       const u=await Store.getUser(); await Store.hydrate(u.id);
     }
@@ -2013,6 +2020,7 @@ async function publishUpload(){
     publishPeriod(period);
     save(LS.uploadMeta,{when:new Date().toLocaleString('fr-FR'),count:n,period});
   }
+  if(sel) sel.value=''; // drop the stale selection so the target selector snaps to the new working period, not the just-published one
   fillSelectOnce();renderAll();
   pushBroadcast('Rapport '+(MLABEL[period]||period)+' publié',`Le tracker prix transactionnels de ${MLABEL[period]||period} est disponible : ${n} finition(s) mises à jour, KPI et alertes recalculés. Le dashboard reflète désormais ${MLABEL[period]||period}.`,'moyenne','report');
   PENDING_UPLOAD=null;document.getElementById('uploadPreview').innerHTML='';document.getElementById('uploadStatus').innerHTML='<div class="empty-note" style="text-align:left;color:var(--green)">✓ Rapport '+(MLABEL[period]||period)+' publié et client notifié.</div>';
@@ -2114,7 +2122,7 @@ async function submitSelection(){
   } else {
     // demo only: illustrate the notification to Valyn. In live, clients can't post
     // broadcasts (RLS); the Pilotage status change is what surfaces to Valyn.
-    pushBroadcast('Sélection '+(MLABEL[period]||period)+' transmise',`${currentAccount().name} a transmis ${ids.length} finition(s) pour l'analyse de ${MLABEL[period]||period}.`,'moyenne');
+    pushBroadcast('Sélection '+(MLABEL[period]||period)+' transmise',`${currentAccount().name} a transmis ${ids.length} finition(s) pour l'analyse de ${MLABEL[period]||period}.`,'moyenne','selection');
   }
   showToast('Sélection transmise — modification possible sous 24 h');
   renderSelection(); renderPilotage();
@@ -2147,6 +2155,7 @@ async function advanceStatus(period,newStatus){
     const np=publishPeriod(period);           // marks PUBLISHED, advances CURRENT, opens next draft
     if(Store.LIVE){
       await Store.upsertMonth(period,'PUBLISHED',{published_at:row.publishedAt});
+      await Store.archiveOlderPublished(period);
       await Store.upsertMonth(np,'DRAFT_SELECTION',{});
     }
     pushBroadcast('Analyse '+(MLABEL[period]||period)+' publiée',`L'analyse de ${MLABEL[period]||period} est disponible : le dashboard reflète désormais ${MLABEL[period]||period}.`,'élevée','report');
