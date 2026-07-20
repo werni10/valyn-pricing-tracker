@@ -9,7 +9,7 @@
 <style>
   :root{
     --black:#0b0f17;--black2:#111827;--ink:#151922;
-    --orange:#f47b20;--orange2:#ff9a4d;--cream:#fff7ef;--focus:#c2410c;
+    --orange:#efc900;--orange2:#ffe066;--cream:#fffdf0;--focus:#8a6a00;
     --bg:#f5f6f8;--card:#ffffff;--line:#e6e8ee;--muted:#636d80;
     --green:#18a058;--red:#d92d20;--blue:#2563eb;--purple:#7c3aed;--amber:#d97706;
     --shadow-soft:0 24px 70px rgba(15,23,42,.09);
@@ -22,7 +22,7 @@
   body{
     margin:0;
     background:
-      radial-gradient(circle at top left, rgba(244,123,32,.12), transparent 32%),
+      radial-gradient(circle at top left, rgba(239,201,0,.12), transparent 32%),
       linear-gradient(180deg,#fbfbfc 0%,#f3f4f7 100%);
     color:var(--ink);
     font-family:Inter,"Segoe UI",Arial,sans-serif;
@@ -32,23 +32,23 @@
   .sidebar{
     position:sticky;top:0;height:100vh;
     background:
-      radial-gradient(circle at 20% 12%, rgba(244,123,32,.28), transparent 28%),
+      radial-gradient(circle at 20% 12%, rgba(239,201,0,.28), transparent 28%),
       linear-gradient(180deg,#080b11 0%,#111827 100%);
     color:white;padding:26px 18px;border-right:1px solid rgba(255,255,255,.06);
     overflow:auto;display:flex;flex-direction:column;
   }
   .brand{display:flex;gap:13px;align-items:center;padding:6px 8px 22px;border-bottom:1px solid rgba(255,255,255,.09);margin-bottom:18px}
-  .brand-mark{width:48px;height:48px;border-radius:16px;background:linear-gradient(135deg,var(--orange),#ffd2ac);color:#101010;display:grid;place-items:center;font-weight:950;letter-spacing:-.04em;box-shadow:0 12px 28px rgba(244,123,32,.25);font-size:22px}
+  .brand-mark{width:48px;height:48px;border-radius:16px;background:linear-gradient(135deg,var(--orange),#fff3b0);color:#101010;display:grid;place-items:center;font-weight:950;letter-spacing:-.04em;box-shadow:0 12px 28px rgba(239,201,0,.25);font-size:22px}
   .brand h1{margin:0;font-size:15px;line-height:1.15;letter-spacing:-.02em}
   .brand p{margin:5px 0 0;font-size:11px;color:#aeb7c7}
   .nav-block{margin:12px 0 18px}
   .nav-title{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#8b95a7;padding:0 12px 9px;font-weight:800}
   .nav-link{width:100%;border:0;background:transparent;color:#dbe1ea;padding:11px 12px;border-radius:14px;display:flex;align-items:center;gap:11px;font-size:13.5px;cursor:pointer;margin:3px 0;text-align:left;transition:.2s ease}
   .nav-link:hover{background:rgba(255,255,255,.07);transform:translateX(2px)}
-  .nav-link.active{background:linear-gradient(90deg,rgba(244,123,32,.24),rgba(255,255,255,.07));color:white;box-shadow:inset 3px 0 0 var(--orange)}
+  .nav-link.active{background:linear-gradient(90deg,rgba(239,201,0,.24),rgba(255,255,255,.07));color:white;box-shadow:inset 3px 0 0 var(--orange)}
   .nav-link .ico{width:30px;height:30px;border-radius:11px;display:grid;place-items:center;background:rgba(255,255,255,.07);font-size:14px}
-  .nav-link.active .ico{background:rgba(244,123,32,.24)}
-  .badge{margin-left:auto;background:rgba(244,123,32,.18);color:#ffc79f;font-weight:800;font-size:10px;border-radius:99px;padding:3px 8px}
+  .nav-link.active .ico{background:rgba(239,201,0,.24)}
+  .badge{margin-left:auto;background:rgba(239,201,0,.18);color:#f5e08a;font-weight:800;font-size:10px;border-radius:99px;padding:3px 8px}
   .sidebar-card{margin-top:auto;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:15px}
   .sidebar-card strong{display:block;font-size:12.5px;margin-bottom:6px}
   .sidebar-card p{margin:0;color:#bcc5d5;font-size:11.5px;line-height:1.45}
@@ -64,7 +64,7 @@
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
   .btn{border:0;border-radius:14px;padding:11px 15px;font-weight:850;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:.18s ease;font-size:13px}
   .btn:hover{transform:translateY(-1px)}
-  .btn-primary{background:var(--orange);color:#111;box-shadow:0 12px 26px rgba(244,123,32,.22)}
+  .btn-primary{background:var(--orange);color:#111;box-shadow:0 12px 26px rgba(239,201,0,.22)}
   .btn-dark{background:var(--black2);color:white}
   .btn-light{background:white;color:#111;border:1px solid var(--line)}
   .btn-ghost{background:#f9fafb;color:#111;border:1px solid var(--line)}
@@ -159,7 +159,7 @@
   .metric{background:#f8fafc;border:1px solid #e5e7eb;border-radius:16px;padding:13px}
   .metric span{display:block;color:var(--muted);font-size:12px;font-weight:800}
   .metric b{display:block;font-size:19px;margin-top:6px}
-  .spark{height:130px;border-radius:18px;background:linear-gradient(180deg,rgba(244,123,32,.08),transparent),repeating-linear-gradient(0deg,#f3f4f6 0,#f3f4f6 1px,transparent 1px,transparent 27px);position:relative;overflow:hidden;border:1px solid #eef0f4;margin:14px 0 8px}
+  .spark{height:130px;border-radius:18px;background:linear-gradient(180deg,rgba(239,201,0,.08),transparent),repeating-linear-gradient(0deg,#f3f4f6 0,#f3f4f6 1px,transparent 1px,transparent 27px);position:relative;overflow:hidden;border:1px solid #eef0f4;margin:14px 0 8px}
   .spark svg{width:100%;height:100%}
   .spark-legend{display:flex;gap:16px;font-size:12px;font-weight:800;color:var(--muted);margin-bottom:14px}
   .spark-legend i{display:inline-block;width:14px;height:4px;border-radius:2px;margin-right:5px;vertical-align:middle}
@@ -194,14 +194,14 @@
   .breakdown .row span:last-child{font-variant-numeric:tabular-nums;font-weight:850}
   .pill-legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
   .formula{font-family:"SFMono-Regular",Menlo,Consolas,monospace;background:#0b0f17;color:#e2e8f0;border-radius:14px;padding:14px 16px;font-size:12.5px;line-height:1.7;overflow:auto}
-  .formula .k{color:#ff9a4d;font-weight:700}
+  .formula .k{color:#ffe066;font-weight:700}
   .formula .c{color:#7dd3fc}
   .tax-table{display:grid;grid-template-columns:1fr auto;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:13px}
   .tax-table>div{padding:9px 13px;border-bottom:1px solid #f0f2f6}
   .tax-table>div:nth-child(2n){text-align:right;font-weight:900;font-variant-numeric:tabular-nums}
   /* auth + rights + upload */
   .login-gate{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:20px;
-    background:radial-gradient(circle at 20% 15%,rgba(244,123,32,.25),transparent 40%),linear-gradient(180deg,#080b11,#111827)}
+    background:radial-gradient(circle at 20% 15%,rgba(239,201,0,.25),transparent 40%),linear-gradient(180deg,#080b11,#111827)}
   .login-gate.hidden{display:none}
   .login-card{width:min(460px,94vw);background:white;border-radius:26px;padding:26px;box-shadow:0 40px 100px rgba(0,0,0,.4)}
   .login-list{display:grid;gap:10px;margin-top:6px}
@@ -419,7 +419,7 @@
           <div class="filters">
             <select class="field" id="histSel" onchange="renderHistory()"></select>
           </div>
-          <div class="spark-legend"><span><i style="background:#f47b20"></i>Prix CEM</span><span><i style="background:#111827"></i>Prix showroom TTC</span></div>
+          <div class="spark-legend"><span><i style="background:#efc900"></i>Prix CEM</span><span><i style="background:#111827"></i>Prix showroom TTC</span></div>
           <div class="spark" id="histSpark"></div>
           <div class="grid three-col" id="histMetrics"></div>
         </div>
@@ -922,7 +922,7 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
     <div><h3>Justificatif transactionnel</h3><p style="margin:6px 0 0;color:var(--muted)">Prévisualisation : brochure, proforma, photo showroom.</p></div>
     <button class="close" onclick="closePanels()">×</button>
   </div>
-  <div style="border:1px solid var(--line);border-radius:20px;background:linear-gradient(135deg,rgba(244,123,32,.12),transparent),#f8fafc;height:230px;display:grid;place-items:center;color:#475569;font-weight:900;text-align:center;margin:16px 0">
+  <div style="border:1px solid var(--line);border-radius:20px;background:linear-gradient(135deg,rgba(239,201,0,.12),transparent),#f8fafc;height:230px;display:grid;place-items:center;color:#475569;font-weight:900;text-align:center;margin:16px 0">
     Aperçu document justificatif<br/>Brochure / Proforma / Photo terrain
   </div>
   <p>Chaque prix publié doit être rattaché à une preuve horodatée : traçabilité, fiabilité et crédibilité du tracker mensuel.</p>
@@ -1168,7 +1168,7 @@ function renderKPI(){
       <div class="label">${k.lab} <span class="info-dot" tabindex="0" data-tip="${k.tip}">i</span></div>
       <div class="value">${k.val}</div>
       <div class="trend ${k.cls}">${k.trend}</div>
-      ${k.spark?`<div class="spark">${sparkSVG([k.spark],['#f47b20'],140,36,4)}</div>`:''}
+      ${k.spark?`<div class="spark">${sparkSVG([k.spark],['#efc900'],140,36,4)}</div>`:''}
     </div>`).join('');
 }
 // Prototype-style monthly reports timeline: each transmitted month + the one in prep.
@@ -1337,7 +1337,7 @@ function openHistory(id){
     <div class="metric"><span>Indice segment</span><b>${ix==null?'—':ix.toFixed(0)}</b></div>
     <div class="metric"><span>Taxe de luxe</span><b>${e.S>0?fmt(e.S):'0'}</b></div>`;
   const s=seriesFor(v);
-  document.getElementById('hpSpark').innerHTML=sparkSVG([s.cem,s.show],['#f47b20','#111827']);
+  document.getElementById('hpSpark').innerHTML=sparkSVG([s.cem,s.show],['#efc900','#111827']);
   document.getElementById('hpBreakdown').innerHTML=breakdownHTML(e);
   document.getElementById('hpComment').innerText=v.comment||'—';
   const vDocs=visibleDocs().filter(d=>d.vehicleId===id);
@@ -1364,7 +1364,7 @@ function breakdownHTML(e){
 function renderHistory(){
   const id=document.getElementById('histSel').value||VEHICLES[0].id;
   const v=VEHICLES.find(x=>x.id===id); const s=seriesFor(v);
-  document.getElementById('histSpark').innerHTML=sparkSVG([s.cem,s.show],['#f47b20','#111827'],440,120);
+  document.getElementById('histSpark').innerHTML=sparkSVG([s.cem,s.show],['#efc900','#111827'],440,120);
   // averages over available months
   const cems=s.cem.filter(x=>x!=null), rems=MONTHS.map(m=>{const x=vehMonth(v,m);return x&&x.e?x.e.remise:null;}).filter(x=>x!=null);
   const cur=vehMonth(v,CURRENT)||vehMonth(v,'2026-05'); const ix=indice(v,CURRENT);
@@ -1705,7 +1705,7 @@ function runAnalysis(){ renderAll(); showToast("Analyse recalculée : KPI, alert
 const CLIENT_CAPS=['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','engine','catalog','collection','quality','selection','contact','settings'];
 const ADMIN_CAPS=['dataadmin','diffusion','users','pilotage','vdash','master','control','coherence','docs'];
 const CAP_LABEL={dashboard:'Dashboard',tracked:'Finitions trackées',history:'Analyse historique',compare:'Comparatif M/M-1',priceindex:'Price Index',benchmark:'Benchmark',reports:'Rapports & exports',simcem:'Simulateur CEM',simremise:'Simulateur remise',engine:'Moteur d\'analyse',catalog:'Catalogue',collection:'Collecte & preuves',quality:'Contrôle qualité',selection:'Sélection M+1',contact:'Contacter Valyn',settings:'Paramètres',dataadmin:'Import données',diffusion:'Diffusion & alertes',users:'Accès & droits',pilotage:'Pilotage mensuel',vdash:'Dashboard Valyn',master:'Master Data',control:'Analyse & contrôle',coherence:'Cohérence intermensuelle',docs:'Bibliothèque de preuves'};
-const AV_COLORS={admin:'linear-gradient(135deg,#f47b20,#ff9a4d)',client:'linear-gradient(135deg,#111827,#374151)'};
+const AV_COLORS={admin:{bg:'linear-gradient(135deg,#efc900,#ffe066)',fg:'#151922'},client:{bg:'linear-gradient(135deg,#111827,#374151)',fg:'#ffffff'}};
 function initials(n){return (n.replace(/[^\p{L}\s]/gu,'').trim().split(/\s+/).map(w=>w[0]).filter(Boolean).slice(0,2).join('')||'?').toUpperCase();}
 function grant(list){const r={};CLIENT_CAPS.concat(ADMIN_CAPS).forEach(c=>r[c]=false);list.forEach(c=>r[c]=true);return r;}
 function allTrue(){return grant(CLIENT_CAPS.concat(ADMIN_CAPS));}
@@ -1895,7 +1895,7 @@ function renderLogin(){
   } else {
     box.innerHTML='<div class="login-list">'+ACCOUNTS.filter(a=>a.active).map(a=>`
       <button class="login-item" onclick="login('${a.id}')">
-        <div class="av" style="background:${AV_COLORS[a.role]}">${initials(a.name)}</div>
+        <div class="av" style="background:${AV_COLORS[a.role].bg};color:${AV_COLORS[a.role].fg}">${initials(a.name)}</div>
         <div><b>${a.name}</b><span>${a.org} · ${a.email}</span></div>
         <span class="login-role role-${a.role}">${a.role==='admin'?'Admin Valyn':'Client'}</span>
       </button>`).join('')+'</div>';
@@ -1954,7 +1954,8 @@ function applyRights(){
   if(activeLink&&activeLink.style.display==='none'){const first=[...document.querySelectorAll('.nav-link')].find(l=>l.style.display!=='none');if(first)first.click();}
   // user chip
   document.getElementById('ucAvatar').innerText=initials(acc.name);
-  document.getElementById('ucAvatar').style.background=AV_COLORS[acc.role];
+  document.getElementById('ucAvatar').style.background=AV_COLORS[acc.role].bg;
+  document.getElementById('ucAvatar').style.color=AV_COLORS[acc.role].fg;
   document.getElementById('ucName').innerText=acc.org;
   document.getElementById('ucRole').innerText=isAdmin?'Admin Valyn — '+acc.name:'Vue client — '+acc.name;
   document.getElementById('pmHead').innerHTML=`<b>${acc.name}</b><br>${acc.org} · ${isAdmin?'Admin':'Client'}<br><span style="color:#9aa3b2">${acc.email}</span>`;
@@ -2028,7 +2029,7 @@ function renderUsers(){
       <label class="switch"><input type="checkbox" ${a.rights[c]?'checked':''} onchange="setRight('${a.id}','${c}',this.checked)"><span class="sl"></span></label></div>`).join('');
     return `<div class="acct-card">
       <div class="acct-head">
-        <div class="av" style="background:${AV_COLORS[a.role]}">${initials(a.name)}</div>
+        <div class="av" style="background:${AV_COLORS[a.role].bg};color:${AV_COLORS[a.role].fg}">${initials(a.name)}</div>
         <div style="min-width:180px"><b style="font-size:15px">${a.name}</b><div style="color:var(--muted);font-size:12.5px">${a.org} · ${a.email}</div></div>
         <select class="field" style="min-width:130px" onchange="setRole('${a.id}',this.value)">
           <option value="client" ${a.role==='client'?'selected':''}>Client</option>
