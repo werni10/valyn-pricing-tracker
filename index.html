@@ -139,6 +139,15 @@
   .step .num2{width:32px;height:32px;border-radius:12px;background:#111827;color:white;display:grid;place-items:center;font-weight:950;margin-bottom:12px}
   .step strong{display:block;margin-bottom:8px}
   .step p{margin:0;color:var(--muted);font-size:13px;line-height:1.4}
+  .timeline{display:grid;gap:11px}
+  .month-row{display:grid;grid-template-columns:110px 1fr auto;gap:14px;align-items:center;border:1px solid var(--line);border-radius:16px;padding:13px 15px;background:white}
+  .month-row .m-label{font-weight:900;font-size:14px}
+  .month-row .m-sub{display:block;color:var(--muted);font-size:11px;font-weight:700;margin-top:2px}
+  .stages{display:flex;gap:6px;flex-wrap:wrap}
+  .stage{font-size:9.5px;font-weight:900;padding:5px 9px;border-radius:8px;background:#eef2f7;color:#64748b;white-space:nowrap;letter-spacing:.02em}
+  .stage.done{background:#dcfce7;color:#166534}
+  .stage.active{background:#fef3c7;color:#92600b}
+  @media(max-width:640px){.month-row{grid-template-columns:1fr}.stages{margin:4px 0}}
   .history-panel{position:fixed;top:0;right:-520px;width:500px;max-width:96vw;height:100vh;background:white;z-index:50;box-shadow:-25px 0 70px rgba(15,23,42,.22);transition:.28s ease;padding:24px;overflow:auto;border-left:1px solid var(--line)}
   .history-panel.open{right:0}
   .overlay{position:fixed;inset:0;background:rgba(2,6,23,.45);z-index:40;display:none}
@@ -271,9 +280,9 @@
     <div class="nav-block">
       <div class="nav-title" id="navTitleClient">Rapport mensuel</div>
       <button class="nav-link active" data-page="dashboard" data-cap="dashboard"><span class="ico">⌁</span>Dashboard mensuel <span class="badge" id="navPeriod">Juin 26</span></button>
-      <button class="nav-link" data-page="tracked" data-cap="tracked"><span class="ico">▦</span>Finitions trackées</button>
+      <button class="nav-link" data-page="tracked" data-cap="tracked"><span class="ico">▦</span>Analyses mensuelles</button>
+      <button class="nav-link" data-page="compare" data-cap="compare"><span class="ico">⇄</span>Analyse comparative</button>
       <button class="nav-link" data-page="history" data-cap="history"><span class="ico">↗</span>Analyse historique</button>
-      <button class="nav-link" data-page="compare" data-cap="compare"><span class="ico">⇄</span>Comparatif M / M-1</button>
       <button class="nav-link" data-page="priceindex" data-cap="priceindex"><span class="ico">◈</span>Price Index segment</button>
       <button class="nav-link" data-page="benchmark" data-cap="benchmark"><span class="ico">◆</span>Benchmark marques</button>
       <button class="nav-link" data-page="reports" data-cap="reports"><span class="ico">⇩</span>Rapports & exports</button>
@@ -348,8 +357,8 @@
       <div class="grid kpi-grid" id="kpiRow"></div>
       <div class="grid two-col">
         <div class="card">
-          <div class="section-head"><div><h3>Top mouvements prix CEM</h3><p>Variations nettes les plus fortes vs mois précédent.</p></div><span class="right-note">Juin / Mai 2026</span></div>
-          <div id="topMoves"></div>
+          <div class="section-head"><div><h3>Rapports mensuels</h3><p>Cliquez sur un mois pour ouvrir l'analyse complète.</p></div></div>
+          <div class="timeline" id="reportsTimeline"></div>
         </div>
         <div class="card">
           <div class="section-head"><div><h3>Alertes flash</h3><p>Signaux détectés automatiquement par le moteur.</p></div></div>
@@ -358,30 +367,25 @@
       </div>
       <div class="grid two-even" style="margin-top:18px">
         <div class="card">
-          <div class="section-head"><div><h3>Remise commerciale réelle par finition</h3><p>Effort commercial pur (hors optimisation fiscale).</p></div></div>
-          <div id="topRemises"></div>
+          <div class="section-head"><div><h3>Top mouvements prix CEM</h3><p>Variations nettes les plus fortes vs mois précédent.</p></div></div>
+          <div id="topMoves"></div>
         </div>
         <div class="card">
-          <div class="section-head"><div><h3>Workflow mensuel</h3><p>De la sélection client à la publication.</p></div></div>
-          <div class="flow">
-            <div class="step"><div class="num2">1</div><strong>Sélection</strong><p>Choix des finitions M+1.</p></div>
-            <div class="step"><div class="num2">2</div><strong>Collecte</strong><p>Brochures, CEM, proformas.</p></div>
-            <div class="step"><div class="num2">3</div><strong>Contrôle</strong><p>Preuves, cohérence, fiscalité.</p></div>
-            <div class="step"><div class="num2">4</div><strong>Analyse</strong><p>KPI, alertes, benchmark.</p></div>
-            <div class="step"><div class="num2">5</div><strong>Publication</strong><p>Dashboard, Excel, PDF.</p></div>
-          </div>
+          <div class="section-head"><div><h3>Remise commerciale réelle par finition</h3><p>Effort commercial pur (hors optimisation fiscale).</p></div></div>
+          <div id="topRemises"></div>
         </div>
       </div>
     </section>
 
-    <!-- TRACKED -->
+    <!-- ANALYSES MENSUELLES (month-selectable) -->
     <section class="page" id="tracked">
       <div class="card">
         <div class="section-head">
-          <div><h3>Finitions trackées — <span id="trkPeriod">Juin 2026</span></h3><p>Cliquez sur une ligne pour ouvrir l'analyse historique latérale. Tous les champs sont calculés par le moteur.</p></div>
+          <div><h3>Analyse mensuelle — <span id="trkPeriod">Juin 2026</span></h3><p>Sélectionnez un mois publié. Cliquez sur une ligne pour ouvrir l'analyse historique. Tous les champs sont calculés par le moteur.</p></div>
           <span class="right-note" id="trkCount"></span>
         </div>
         <div class="filters">
+          <select class="field" id="trackedMonth" onchange="onMonthChange()"></select>
           <input class="field search" id="trackedSearch" placeholder="Rechercher modèle, finition, segment..." oninput="renderTracked()">
           <select class="field" id="trackedBrand" onchange="renderTracked()"><option value="">Toutes marques</option></select>
           <select class="field" id="trackedSeg" onchange="renderTracked()"><option value="">Tous segments</option></select>
@@ -1138,23 +1142,26 @@ function signed(n){ const r=Math.round(n); return (r>0?'+':'')+nf.format(r); }
 function num(el){ return parseFloat(String(el.value).replace(/\s/g,'').replace(',','.'))||0; }
 
 /* ================= RENDER: DASHBOARD ================= */
+// months transmitted to the client (published now + previously published/archived)
+function transmittedPeriods(){
+  const org=CFG.org||'Auto Nejma';
+  return CYCLE.filter(m=>m.org===org&&(m.status==='PUBLISHED'||m.status==='ARCHIVED')).map(m=>m.period).sort();
+}
 function renderKPI(){
   const sc = scope(CURRENT);
-  const scPrev = scope(PREV);
-  const remAvg = sc.reduce((a,v)=>a+vehMonth(v,CURRENT).e.AB,0)/sc.length; // commerciale réelle
-  const remTotAvg = sc.reduce((a,v)=>a+vehMonth(v,CURRENT).e.remise,0)/sc.length;
-  const cemAvg = sc.reduce((a,v)=>a+vehMonth(v,CURRENT).e.CEM,0)/sc.length;
-  const cemAvgPrev = scPrev.length? scPrev.reduce((a,v)=>a+vehMonth(v,PREV).e.CEM,0)/scPrev.length : cemAvg;
-  const newCount = sc.filter(v=>!v.months[PREV]).length;
-  const alerts = buildAlerts();
-  const aggr = sc.filter(v=>vehMonth(v,CURRENT).e.AB>0.08).length;
-  const cemDelta = (cemAvg-cemAvgPrev)/cemAvgPrev*100;
   const cemSeries = MONTHS.map(m=>{ const s=scope(m); return s.length? s.reduce((a,v)=>a+vehMonth(v,m).e.CEM,0)/s.length : null; });
+  const alerts = buildAlerts();
+  const transmitted = transmittedPeriods().length;
+  const totalFinitions = VEHICLES.filter(v=>Object.keys(v.months).length).length;
+  const wp = workingPeriod();
+  const selCount = (SELECTIONS[wp]||[]).length;
+  const wpRow = cycleRow(wp);
+  const selDone = wpRow && wpRow.status!=='DRAFT_SELECTION';
   const kpis = [
-    {lab:'Finitions suivies', tip:'Finitions Auto Nejma avec données calculables sur le mois courant.', val:sc.length, trend:`+${newCount} nouvelle(s) vs M-1`, cls:'blue'},
-    {lab:'Remise totale moyenne', tip:'Moyenne des remises totales (fiscale + commerciale) sur prix HT.', val:fmtP(remTotAvg), trend:`dont ${fmtP(remAvg)} commerciale réelle`, cls:'amber'},
-    {lab:'Prix CEM moyen', tip:'Prix clé en main moyen des finitions suivies.', val:fmtK(cemAvg), trend:`${cemDelta>=0?'+':''}${cemDelta.toFixed(1)} % vs M-1`, cls: cemDelta<=0?'green':'red', spark:cemSeries},
-    {lab:'Alertes détectées', tip:'Signaux pricing/fiscaux générés par le moteur.', val:alerts.length, trend:`${aggr} remise(s) commerciale(s) > 8 %`, cls:'amber'}
+    {lab:'Rapports transmis', tip:'Nombre de mois d\'analyse publiés et consultables.', val:transmitted, trend:transmitted?`Dernier : ${MLABEL[CURRENT]||CURRENT}`:'Aucun encore', cls:'blue'},
+    {lab:'Finitions analysées', tip:'Total des finitions présentes dans le périmètre, tous mois confondus.', val:totalFinitions, trend:`${sc.length} sur ${MLABEL[CURRENT]||CURRENT}`, cls:'blue', spark:cemSeries},
+    {lab:'Alertes flash', tip:'Signaux pricing / fiscaux générés automatiquement ce mois.', val:alerts.length, trend:`sur ${MLABEL[CURRENT]||CURRENT}`, cls:'amber'},
+    {lab:'Sélection '+(MLABEL[wp]||wp), tip:'Périmètre choisi pour l\'analyse du mois prochain.', val:selDone?selCount+' ✓':selCount+' choisie(s)', trend:selDone?'Sélection transmise':'À transmettre', cls:selDone?'green':'red'}
   ];
   document.getElementById('kpiRow').innerHTML = kpis.map(k=>`
     <div class="card kpi">
@@ -1163,6 +1170,34 @@ function renderKPI(){
       <div class="trend ${k.cls}">${k.trend}</div>
       ${k.spark?`<div class="spark">${sparkSVG([k.spark],['#f47b20'],140,36,4)}</div>`:''}
     </div>`).join('');
+}
+// Prototype-style monthly reports timeline: each transmitted month + the one in prep.
+function renderReportsTimeline(){
+  const el=document.getElementById('reportsTimeline'); if(!el) return;
+  const org=CFG.org||'Auto Nejma';
+  const rows=CYCLE.filter(m=>m.org===org).slice().sort((a,b)=>a.period<b.period?1:-1);
+  const stageDef=[['Sélection','SELECTION_SUBMITTED'],['Analyse','DATA_IN_PROGRESS'],['Contrôle','QUALITY_CONTROL'],['Transmise','PUBLISHED']];
+  el.innerHTML=rows.map(r=>{
+    const isPub=r.status==='PUBLISHED'||r.status==='ARCHIVED';
+    const idx=STATUS_ORDER.indexOf(r.status);
+    const stages=stageDef.map(([label,st])=>{
+      const si=STATUS_ORDER.indexOf(st);
+      const cls = isPub ? 'done' : (idx>si ? 'done' : (idx===si ? 'active' : ''));
+      return `<span class="stage ${cls}">${label}</span>`;
+    }).join('');
+    const meta=STATUS_META[r.status];
+    const btn=isPub
+      ? `<button class="btn btn-primary btn-sm" onclick="openMonthAnalysis('${r.period}')">Ouvrir</button>`
+      : `<span class="chip ${meta.cls}">${meta.label}</span>`;
+    return `<div class="month-row"><div><span class="m-label">${MLABEL[r.period]||r.period}</span><span class="m-sub">${isPub?'Analyse transmise':meta.label}</span></div><div class="stages">${stages}</div>${btn}</div>`;
+  }).join('')||'<div class="empty-note">Aucun rapport pour le moment.</div>';
+}
+// open a specific published month in the Analyses mensuelles view
+function openMonthAnalysis(period){
+  VIEW_MONTH=period;
+  const sel=document.getElementById('trackedMonth'); if(sel) sel.value=period;
+  const link=document.querySelector('.nav-link[data-page="tracked"]'); if(link) link.click();
+  renderTracked();
 }
 function renderTopMoves(){
   const rows = scope(CURRENT).map(v=>{
@@ -1222,16 +1257,29 @@ function statutChip(s){
   const map={'Suivi':'chip-ok','Nouveau':'chip-new','Alerte':'chip-alert','Hors scope':'chip-muted','Arrêtée':'chip-muted','À vérifier':'chip-track'};
   return `<span class="chip ${map[s]||'chip-muted'}">${s}</span>`;
 }
+let VIEW_MONTH=null; // month shown in Analyses mensuelles; null = active (CURRENT)
+function viewMonth(){ return (VIEW_MONTH && MONTHS.includes(VIEW_MONTH)) ? VIEW_MONTH : CURRENT; }
+function onMonthChange(){ VIEW_MONTH=document.getElementById('trackedMonth').value||null; renderTracked(); }
+function fillMonthSelector(){
+  const sel=document.getElementById('trackedMonth'); if(!sel) return;
+  const opts=transmittedPeriods().slice().reverse();       // published months, newest first
+  const cur=viewMonth();
+  sel.innerHTML=opts.map(p=>`<option value="${p}">${MLABEL[p]||p}${p===CURRENT?' — actuel':''}</option>`).join('');
+  sel.value=opts.includes(cur)?cur:(opts[0]||CURRENT);
+}
 function renderTracked(){
+  fillMonthSelector();
+  const M=viewMonth();
+  document.getElementById('trkPeriod').innerText=MLABEL[M]||M;
   const q=(document.getElementById('trackedSearch').value||'').toLowerCase();
   const fb=document.getElementById('trackedBrand').value, fs=document.getElementById('trackedSeg').value;
-  const list=scope(CURRENT).filter(v=>{
+  const list=scope(M).filter(v=>{
     const s=`${v.marque} ${v.modele} ${v.finition} ${v.segment}`.toLowerCase();
     return s.includes(q) && (!fb||v.marque===fb) && (!fs||v.segment===fs);
   });
   document.getElementById('trkCount').innerText=`${list.length} référence(s)`;
   document.getElementById('trackedBody').innerHTML=list.map(v=>{
-    const c=vehMonth(v,CURRENT).e; const st=statut(v,CURRENT); const ix=indice(v,CURRENT);
+    const c=vehMonth(v,M).e; const st=statut(v,M); const ix=indice(v,M);
     const ixCls = ix==null?'':(ix>100?'red':'green');
     return `<tr class="clk" tabindex="0" role="button" aria-label="Ouvrir l'historique de ${v.modele} ${v.finition}" onclick="openHistory('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHistory('${v.id}')}">
       <td><strong>${v.modele} ${v.finition}</strong><br><span style="color:var(--muted);font-size:11px">${v.marque} · ${v.motor}</span></td>
@@ -1609,9 +1657,9 @@ function exportCompareCSV(){
 /* ================= NAV / MISC ================= */
 const PAGES={
   dashboard:["Dashboard mensuel","Indicateurs calculés en direct : remises, taxe de luxe, CEM, indice segment."],
-  tracked:["Finitions trackées","Tableau opérationnel des finitions suivies — 100 % calculé par le moteur."],
+  tracked:["Analyses mensuelles","Analyse complète d'un mois publié : prix, remises, taxe de luxe, CEM, indice — 100 % calculé par le moteur."],
   history:["Analyse historique","Évolution mensuelle des prix, remises, CEM et indices par finition."],
-  compare:["Comparatif M / M-1","Évolution showroom, remise et CEM entre juin et mai 2026."],
+  compare:["Analyse comparative","Évolution showroom, remise et CEM entre le mois courant et le précédent."],
   priceindex:["Price Index segment","Positionnement transactionnel vs concurrence directe, par segment."],
   benchmark:["Benchmark marques","Lecture comparative par marque et matrice de compétitivité."],
   reports:["Rapports & exports","Export Excel (CSV), rapport PDF et justificatifs mensuels."],
@@ -2453,7 +2501,7 @@ function renderDocs(){
 /* ================= INIT ================= */
 function renderAll(){
   recomputeCalendar();
-  renderKPI(); renderTopMoves(); renderTopRemises(); renderAlerts();
+  renderKPI(); renderReportsTimeline(); renderTopMoves(); renderTopRemises(); renderAlerts();
   renderTracked(); renderHistory(); renderCompare(); renderPriceIndex(); renderBenchmark();
   renderCatalog(); renderQuality(); renderEngineExample(); calcSimCEM(); calcSimRemise();
   renderUsers(); renderDiffusion(); renderDataAdmin(); renderNotif();
