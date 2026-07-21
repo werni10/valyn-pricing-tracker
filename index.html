@@ -1977,7 +1977,7 @@ function unreadCount(){const acc=currentAccount();if(!acc)return 0;const r=READS
 function prioChip(p){return p==='élevée'?'chip-alert':p==='moyenne'?'chip-track':'chip-new';}
 function prioIco(p){return p==='élevée'?'!':p==='moyenne'?'▲':'✉';}
 function renderNotif(){
-  const acc=currentAccount();const r=(READS[acc.id]||[]);
+  const acc=currentAccount();if(!acc)return;const r=(READS[acc.id]||[]);
   const n=unreadCount();
   const badge=document.getElementById('bellBadge');
   if(n>0){badge.style.display='';badge.innerText=n;}else{badge.style.display='none';}
