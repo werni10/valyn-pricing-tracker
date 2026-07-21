@@ -781,11 +781,11 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
     <section class="page" id="dataadmin">
       <div class="grid two-col">
         <div class="card">
-          <div class="section-head"><div><h3>Import données mensuelles (xlsx / csv)</h3><p>Chargez le fichier collecte du mois. Le moteur recalcule tout. Passez ensuite par Pilotage pour valider le contrôle et transmettre au client.</p></div></div>
+          <div class="section-head"><div><h3>Import données mensuelles (xlsx / xlsm / csv)</h3><p>Chargez le fichier collecte du mois. Le moteur recalcule tout. Passez ensuite par Pilotage pour valider le contrôle et transmettre au client.</p></div></div>
           <label class="fl">Mois à publier</label>
           <select class="field" id="daTarget" style="width:100%;margin-bottom:12px"></select>
           <div class="upload-zone" id="dropZone">
-            <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFile(this.files[0])">
+            <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xls,.csv" style="display:none" onchange="handleFile(this.files[0])">
             <div style="font-size:34px">⬆</div>
             <strong style="display:block;margin:8px 0 4px">Déposer le fichier ou cliquer</strong>
             <span style="color:var(--muted);font-size:13px">Colonnes : Marque · Modèle · Motorisation · Finition · Segment · Type · Prix Showroom TTC · Prix remisé TTC CEM · Frais immat · Commentaire</span>
