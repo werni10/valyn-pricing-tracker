@@ -2062,26 +2062,60 @@ function inviteAccount(){
 
 /* ================= DATA IMPORT (xlsx/csv) ================= */
 function norm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'');}
-function pick(headers,cands){for(const c of cands){const i=headers.findIndex(h=>norm(h)===norm(c)||norm(h).includes(norm(c)));if(i>=0)return i;}return -1;}
+// substring fallback only for candidates >3 chars — short codes like 'fi'/'cem' must match
+// exactly, else 'fi' greedily substring-matches inside 'Finition' and grabs the wrong column.
+function pick(headers,cands){for(const c of cands){const nc=norm(c);const i=headers.findIndex(h=>{const nh=norm(h);return nh===nc||(nc.length>3&&nh.includes(nc));});if(i>=0)return i;}return -1;}
 function parseNum(v){if(v==null||v==='')return null;const n=parseFloat(String(v).replace(/\s/g,'').replace(/[^\d.,-]/g,'').replace(',','.'));return isNaN(n)?null:n;}
-function rowsToRecords(rows){
-  const headers=rows[0].map(String);
+// Real monthly files sometimes carry a title/date row above the real header,
+// so locate the header by content (the "Marque" cell) instead of assuming rows[0].
+function rowsToRecords(rows,refMap){
+  const hIdx=rows.findIndex(r=>r.some(c=>norm(c)==='marque'));
+  if(hIdx<0)return [];
+  const headers=rows[hIdx].map(String);
   const ix={marque:pick(headers,['marque']),modele:pick(headers,['modele','modèle']),motor:pick(headers,['motorisation','moteur']),
-    finition:pick(headers,['finition']),seg:pick(headers,['segment']),type:pick(headers,['typedemotorisation','type']),
+    finition:pick(headers,['finition']),seg:pick(headers,['segment','segments']),type:pick(headers,['typedemotorisation','type']),
+    kv:pick(headers,['keyversion']),
     show:pick(headers,['prixshowroomttc','showroom','pvp','prixdeventepublic']),cem:pick(headers,['prixremisettccem','cem','prixcem','remisettccem']),
     fi:pick(headers,['fraisdimmatriculation','fraisimmat','fi']),com:pick(headers,['commentaire','comment'])};
   const recs=[];
-  for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||!r.length)continue;
+  for(let i=hIdx+1;i<rows.length;i++){const r=rows[i];if(!r||!r.length)continue;
     const marque=r[ix.marque],modele=r[ix.modele],finition=r[ix.finition];
     const show=parseNum(r[ix.show]),cem=parseNum(r[ix.cem]);
     if(!marque||!modele||show==null||cem==null)continue;
+    // the monthly "Input Data" sheet doesn't carry Segment/FI itself — they live in
+    // "Ref Segment&FI" keyed by Key_Version, so fall back to that join when the
+    // column isn't present in this sheet.
+    const kv=ix.kv>=0?String(r[ix.kv]||'').trim():'';
+    const ref=refMap&&kv?refMap[norm(kv)]:null;
+    const fiVal=ix.fi>=0?parseNum(r[ix.fi]):(ref&&ref.fi!=null?ref.fi:null);
+    const segVal=(ix.seg>=0&&r[ix.seg])?String(r[ix.seg]).trim():(ref&&ref.segment?ref.segment:'');
+    const typeVal=(ix.type>=0&&r[ix.type])?String(r[ix.type]).trim():null;
     recs.push({marque:String(marque).toUpperCase().trim(),modele:String(modele).trim(),
       motor:ix.motor>=0?String(r[ix.motor]||'').trim():'',finition:ix.finition>=0?String(finition||'').trim():'',
-      segment:ix.seg>=0?String(r[ix.seg]||'Divers').trim():'Divers',type:ix.type>=0&&r[ix.type]?String(r[ix.type]).trim():'Thermique',
-      showroom:show,cemObs:cem,fi:ix.fi>=0?(parseNum(r[ix.fi])||FI_DEFAULT):FI_DEFAULT,
+      segment:segVal||'Divers',type:typeVal||'Thermique',typeProvided:typeVal!=null,
+      showroom:show,cemObs:cem,fi:fiVal??FI_DEFAULT,fiProvided:fiVal!=null,
       comment:ix.com>=0?String(r[ix.com]||'').trim():''});
   }
   return recs;
+}
+// '2026-06' -> '06.26', matching the workbook's "Input Data 06.26" sheet naming
+function periodToMMYY(period){
+  const m=/^(\d{4})-(\d{2})$/.exec(period||'');
+  return m?m[2]+'.'+m[1].slice(2):'';
+}
+function buildKeyVersionMap(wb){
+  const rn=wb.SheetNames.find(n=>/ref.*segment|segment.*ref/i.test(n));
+  if(!rn)return null;
+  const aoa=XLSX.utils.sheet_to_json(wb.Sheets[rn],{header:1,defval:''});
+  const hIdx=aoa.findIndex(r=>r.some(c=>norm(c)==='keyversion'));
+  if(hIdx<0)return null;
+  const headers=aoa[hIdx].map(String);
+  const ixKV=pick(headers,['keyversion']),ixSeg=pick(headers,['segments','segment']),ixFi=pick(headers,['fi','fraisdimmatriculation','fraisimmat']);
+  if(ixKV<0)return null;
+  const map={};
+  for(let i=hIdx+1;i<aoa.length;i++){const r=aoa[i];const kv=r[ixKV];if(!kv)continue;
+    map[norm(kv)]={segment:ixSeg>=0?String(r[ixSeg]||'').trim():'',fi:ixFi>=0?parseNum(r[ixFi]):null};}
+  return map;
 }
 let PENDING_UPLOAD=null;
 let xlsxLoadPromise=null;
@@ -2108,16 +2142,23 @@ async function handleFile(file){
   const reader=new FileReader();
   reader.onload=e=>{
     try{
-      let rows;
+      let rows,refMap=null;
       if(/\.csv$/i.test(file.name)){
         rows=String(e.target.result).split(/\r?\n/).filter(l=>l.trim()).map(l=>l.split(/;|,\t|\t/).length>1?l.split(/;|\t/):l.split(','));
       } else {
         const wb=XLSX.read(e.target.result,{type:'binary'});
-        // prefer a sheet whose name suggests input data, else first with enough columns
-        let sn=wb.SheetNames.find(n=>/input|collecte|saisie|data/i.test(n))||wb.SheetNames[0];
+        const targetSel=document.getElementById('daTarget');
+        const mmYY=periodToMMYY((targetSel&&targetSel.value)||workingPeriod());
+        // prefer the "Input Data <target month>" sheet; the workbook also has an
+        // "Input Data follow-up" multi-month tracker that must NOT be picked instead.
+        let sn=wb.SheetNames.find(n=>/^input\s*data\b/i.test(n)&&mmYY&&n.includes(mmYY))
+          ||wb.SheetNames.find(n=>/^input\s*data\b/i.test(n)&&!/follow.?up|suivi/i.test(n))
+          ||wb.SheetNames.find(n=>/input|collecte|saisie|data/i.test(n)&&!/follow.?up|suivi/i.test(n))
+          ||wb.SheetNames[0];
         rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''}).filter(r=>r.some(c=>String(c).trim()));
+        refMap=buildKeyVersionMap(wb);
       }
-      const recs=rowsToRecords(rows);
+      const recs=rowsToRecords(rows,refMap);
       if(!recs.length){status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Aucune ligne exploitable. Vérifiez les colonnes (Marque, Modèle, Prix Showroom TTC, Prix remisé TTC CEM).</div>';return;}
       PENDING_UPLOAD=recs;
       status.innerHTML=`<div class="empty-note" style="text-align:left"><strong>${recs.length} finition(s)</strong> détectée(s) et prêtes à publier.</div>`;
@@ -2131,7 +2172,10 @@ function applyUpload(recs,period){
   period=period||CURRENT;
   recs.forEach(r=>{
     let v=VEHICLES.find(x=>norm(x.marque)===norm(r.marque)&&norm(x.modele)===norm(r.modele)&&norm(x.finition)===norm(r.finition));
-    if(v){v.months[period]={showroom:r.showroom,cemObs:r.cemObs};if(r.comment)v.comment=r.comment;v.fi=r.fi;v.type=r.type;delete v.statutOverride;}
+    if(v){v.months[period]={showroom:r.showroom,cemObs:r.cemObs};if(r.comment)v.comment=r.comment;
+      // real monthly files never carry Type, and FI only when the Ref Segment&FI join found it —
+      // don't stomp existing catalog values (EV/hybrid flags, custom FI) with fallback defaults.
+      if(r.fiProvided)v.fi=r.fi;if(r.typeProvided)v.type=r.type;delete v.statutOverride;}
     else VEHICLES.push({id:'up'+Math.random().toString(36).slice(2,7),marque:r.marque,modele:r.modele,motor:r.motor||'—',finition:r.finition||'(import)',
       segment:r.segment,type:r.type,fi:r.fi,catalogue:r.showroom,role:'client',statutOverride:'Nouveau',comment:r.comment||'Importé depuis fichier mensuel.',
       months:{[period]:{showroom:r.showroom,cemObs:r.cemObs}}});
