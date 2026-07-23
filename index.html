@@ -443,14 +443,18 @@
     <!-- COMPARE M/M-1 -->
     <section class="page" id="compare">
       <div class="card">
-        <div class="section-head"><div><h3>Analyse comparative M / M-1</h3><p id="cmpSub">Juin 2026 vs Mai 2026 · évolution showroom, remise et CEM.</p></div></div>
+        <div class="section-head"><div><h3>Analyse comparative</h3><p id="cmpSub">Évolution showroom, remise et CEM entre deux mois.</p></div></div>
+        <div class="filters">
+          <label class="fl" style="display:flex;align-items:center;gap:6px">Mois A <select class="field" id="cmpA" onchange="renderCompare()"></select></label>
+          <label class="fl" style="display:flex;align-items:center;gap:6px">Mois B <select class="field" id="cmpB" onchange="renderCompare()"></select></label>
+        </div>
         <div class="table-wrap">
           <table>
             <thead><tr>
               <th>Finition</th><th>Segment</th>
-              <th class="num">Showroom M-1</th><th class="num">Showroom M</th><th class="num">Δ Showroom</th>
-              <th class="num">Remise M-1</th><th class="num">Remise M</th><th class="num">Δ Remise</th>
-              <th class="num">CEM M-1</th><th class="num">CEM M</th><th class="num">Δ CEM</th>
+              <th class="num" id="cmpThA1">Showroom A</th><th class="num" id="cmpThB1">Showroom B</th><th class="num">Δ Showroom</th>
+              <th class="num" id="cmpThA2">Remise A</th><th class="num" id="cmpThB2">Remise B</th><th class="num">Δ Remise</th>
+              <th class="num" id="cmpThA3">CEM A</th><th class="num" id="cmpThB3">CEM B</th><th class="num">Δ CEM</th>
               <th>Tag</th>
             </tr></thead>
             <tbody id="compareBody"></tbody>
@@ -493,7 +497,7 @@
         <div class="section-head"><div><h3>Rapports & exports</h3><p>Livrables mensuels prêts pour client, direction, pricing et marketing.</p></div></div>
         <div class="export-card"><div><h4>Fichier maître Excel (CSV)</h4><p>Base complète calculée : prix, remises, taxe luxe, CEM, indices, lecture.</p></div><button class="btn btn-primary" onclick="exportCSV()">Télécharger</button></div>
         <div class="export-card"><div><h4>Rapport PDF / impression</h4><p>Synthèse direction imprimable : KPI, alertes, benchmark, comparatif.</p></div><button class="btn btn-primary" onclick="window.print()">Générer</button></div>
-        <div class="export-card"><div><h4>Comparatif M/M-1 (CSV)</h4><p>Évolutions showroom, remise et CEM avec tags de lecture.</p></div><button class="btn btn-light" onclick="exportCompareCSV()">Télécharger</button></div>
+        <div class="export-card"><div><h4>Analyse comparative (CSV)</h4><p>Évolutions showroom, remise et CEM avec tags de lecture.</p></div><button class="btn btn-light" onclick="exportCompareCSV()">Télécharger</button></div>
         <div class="export-card"><div><h4>Annexe justificatifs</h4><p>Brochures, proformas, photos et supports commerciaux collectés.</p></div><button class="btn btn-light" onclick="openModal('proofModal')">Consulter</button></div>
       </div>
     </section>
@@ -1271,7 +1275,19 @@ function fillSelectOnce(){
   document.getElementById('trackedSeg').innerHTML='<option value="">Tous segments</option>'+segs.map(s=>`<option>${s}</option>`).join('');
   fillHistFilters();
   fillMasterFilters();
+  fillCompareMonths();
   fillUploadVehicles();
+}
+function fillCompareMonths(){
+  const a=document.getElementById('cmpA'), b=document.getElementById('cmpB');
+  if(!a||!b) return;
+  const opts=transmittedPeriods().slice().reverse(); // newest first
+  if(!opts.length) return;
+  const optHTML=opts.map(p=>`<option value="${p}">${MLABEL[p]||p}</option>`).join('');
+  const pa=a.value, pb=b.value;
+  a.innerHTML=optHTML; b.innerHTML=optHTML;
+  a.value=opts.includes(pa)?pa:(opts.includes(PREV)?PREV:(opts[1]||opts[0]));
+  b.value=opts.includes(pb)?pb:(opts.includes(CURRENT)?CURRENT:opts[0]);
 }
 function statutChip(s){
   const map={'Suivi':'chip-ok','Nouveau':'chip-new','Alerte':'chip-alert','Hors scope':'chip-muted','Arrêtée':'chip-muted','À vérifier':'chip-track'};
@@ -1488,9 +1504,15 @@ function tag(dCem,dShow,dRem){
   return {t:'Variation limitée',c:'chip-muted'};
 }
 function renderCompare(){
-  const rows=VEHICLES.filter(v=>vehMonth(v,CURRENT)&&vehMonth(v,PREV)&&vehMonth(v,CURRENT).e&&vehMonth(v,PREV).e);
+  fillCompareMonths();
+  const a=document.getElementById('cmpA')?.value||PREV, b=document.getElementById('cmpB')?.value||CURRENT;
+  const al=MLABEL[a]||a, bl=MLABEL[b]||b;
+  const cmpSub=document.getElementById('cmpSub'); if(cmpSub) cmpSub.innerText=`${al} vs ${bl} · évolution showroom, remise et CEM.`;
+  ['cmpThA1','cmpThA2','cmpThA3'].forEach((id,i)=>{const el=document.getElementById(id); if(el) el.innerText=['Showroom','Remise','CEM'][i]+' '+al;});
+  ['cmpThB1','cmpThB2','cmpThB3'].forEach((id,i)=>{const el=document.getElementById(id); if(el) el.innerText=['Showroom','Remise','CEM'][i]+' '+bl;});
+  const rows=VEHICLES.filter(v=>vehMonth(v,b)&&vehMonth(v,a)&&vehMonth(v,b).e&&vehMonth(v,a).e);
   document.getElementById('compareBody').innerHTML=rows.map(v=>{
-    const m=vehMonth(v,CURRENT).e, p=vehMonth(v,PREV).e;
+    const m=vehMonth(v,b).e, p=vehMonth(v,a).e;
     const dShow=(m.pvpTTC-p.pvpTTC)/p.pvpTTC, dRem=m.remise-p.remise, dCem=(m.CEM-p.CEM)/p.CEM;
     const tg=tag(dCem,dShow,dRem);
     const dc=(x)=>x>0.0005?'red':(x<-0.0005?'green':'');
@@ -1502,7 +1524,7 @@ function renderCompare(){
       <td class="num">${fmt(p.CEM)}</td><td class="num">${fmt(m.CEM)}</td><td class="num ${dc(dCem)}">${dCem===0?'0 %':(dCem*100).toFixed(2)+' %'}</td>
       <td><span class="chip ${tg.c}">${tg.t}</span></td>
     </tr>`;
-  }).join('');
+  }).join('')||'<tr><td colspan="12" class="empty-note">Aucune finition commune aux deux mois sélectionnés.</td></tr>';
   document.getElementById('compareNotes').innerHTML=`<div class="empty-note" style="text-align:left"><strong>Lecture :</strong> le comparatif isole les 3 leviers du prix net (showroom, remise, CEM). Un CEM qui bouge sans variation showroom/remise signale un effet <em>palier fiscal</em> (changement de taux de taxe de luxe).</div>`;
 }
 
@@ -1739,14 +1761,15 @@ function exportCSV(){
   download(`AutoNejma_Analyse_${(MLABEL[CURRENT]||CURRENT).replace(/\s/g,'')}.csv`,csv); showToast('Fichier maître Excel (CSV) téléchargé — vue filtrée');
 }
 function exportCompareCSV(){
-  const H=['Finition','Segment','Showroom M-1','Showroom M','Delta Showroom %','Remise M-1 %','Remise M %','Delta Remise pt','CEM M-1','CEM M','Delta CEM %','Tag'];
+  const a=document.getElementById('cmpA')?.value||PREV, b=document.getElementById('cmpB')?.value||CURRENT;
+  const H=[`Finition`,`Segment`,`Showroom ${MLABEL[a]||a}`,`Showroom ${MLABEL[b]||b}`,'Delta Showroom %',`Remise ${MLABEL[a]||a} %`,`Remise ${MLABEL[b]||b} %`,'Delta Remise pt',`CEM ${MLABEL[a]||a}`,`CEM ${MLABEL[b]||b}`,'Delta CEM %','Tag'];
   const filteredIds=new Set(trackedFiltered().map(v=>v.id));
-  const rows=VEHICLES.filter(v=>filteredIds.has(v.id)&&vehMonth(v,CURRENT)&&vehMonth(v,PREV)&&vehMonth(v,CURRENT).e&&vehMonth(v,PREV).e).map(v=>{
-    const m=vehMonth(v,CURRENT).e,p=vehMonth(v,PREV).e; const dShow=(m.pvpTTC-p.pvpTTC)/p.pvpTTC,dRem=m.remise-p.remise,dCem=(m.CEM-p.CEM)/p.CEM;
+  const rows=VEHICLES.filter(v=>filteredIds.has(v.id)&&vehMonth(v,b)&&vehMonth(v,a)&&vehMonth(v,b).e&&vehMonth(v,a).e).map(v=>{
+    const m=vehMonth(v,b).e,p=vehMonth(v,a).e; const dShow=(m.pvpTTC-p.pvpTTC)/p.pvpTTC,dRem=m.remise-p.remise,dCem=(m.CEM-p.CEM)/p.CEM;
     return [`${v.modele} ${v.finition}`,v.segment,p.pvpTTC,m.pvpTTC,(dShow*100).toFixed(1),(p.remise*100).toFixed(1),(m.remise*100).toFixed(1),(dRem*100).toFixed(1),Math.round(p.CEM),Math.round(m.CEM),(dCem*100).toFixed(2),tag(dCem,dShow,dRem).t];
   });
   const csv=[H,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
-  download(`AutoNejma_Comparatif_${(MLABEL[CURRENT]||CURRENT).replace(/\s/g,'')}_vs_${(MLABEL[PREV]||PREV).replace(/\s/g,'')}.csv`,csv); showToast('Comparatif M/M-1 téléchargé — vue filtrée');
+  download(`AutoNejma_Comparatif_${(MLABEL[a]||a).replace(/\s/g,'')}_vs_${(MLABEL[b]||b).replace(/\s/g,'')}.csv`,csv); showToast('Comparatif téléchargé — vue filtrée');
 }
 
 /* ================= NAV / MISC ================= */
@@ -1754,7 +1777,7 @@ const PAGES={
   dashboard:["Dashboard mensuel","Indicateurs calculés en direct : remises, taxe de luxe, CEM, indice segment."],
   tracked:["Analyses mensuelles","Analyse complète d'un mois publié : prix, remises, taxe de luxe, CEM, indice — 100 % calculé par le moteur."],
   history:["Analyse historique","Évolution mensuelle des prix, remises, CEM et indices par finition."],
-  compare:["Analyse comparative","Évolution showroom, remise et CEM entre le mois courant et le précédent."],
+  compare:["Analyse comparative","Évolution showroom, remise et CEM entre deux mois publiés au choix."],
   priceindex:["Price Index segment","Positionnement transactionnel vs concurrence directe, par segment."],
   benchmark:["Benchmark marques","Lecture comparative par marque et matrice de compétitivité."],
   reports:["Rapports & exports","Export Excel (CSV), rapport PDF et justificatifs mensuels."],
@@ -1799,7 +1822,7 @@ function runAnalysis(){ renderAll(); showToast("Analyse recalculée : KPI, alert
 /* ================= AUTH / ACCOUNTS / RIGHTS ================= */
 const CLIENT_CAPS=['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','engine','catalog','collection','quality','selection','contact','settings'];
 const ADMIN_CAPS=['dataadmin','diffusion','users','pilotage','vdash','master','control','coherence','docs'];
-const CAP_LABEL={dashboard:'Dashboard',tracked:'Finitions trackées',history:'Analyse historique',compare:'Comparatif M/M-1',priceindex:'Price Index',benchmark:'Benchmark',reports:'Rapports & exports',simcem:'Simulateur CEM',simremise:'Simulateur remise',engine:'Moteur d\'analyse',catalog:'Catalogue',collection:'Collecte & preuves',quality:'Contrôle qualité',selection:'Sélection M+1',contact:'Contacter Valyn',settings:'Paramètres',dataadmin:'Import données',diffusion:'Diffusion & alertes',users:'Accès & droits',pilotage:'Pilotage mensuel',vdash:'Dashboard Valyn',master:'Master Data',control:'Analyse & contrôle',coherence:'Cohérence intermensuelle',docs:'Bibliothèque de preuves'};
+const CAP_LABEL={dashboard:'Dashboard',tracked:'Finitions trackées',history:'Analyse historique',compare:'Analyse comparative',priceindex:'Price Index',benchmark:'Benchmark',reports:'Rapports & exports',simcem:'Simulateur CEM',simremise:'Simulateur remise',engine:'Moteur d\'analyse',catalog:'Catalogue',collection:'Collecte & preuves',quality:'Contrôle qualité',selection:'Sélection M+1',contact:'Contacter Valyn',settings:'Paramètres',dataadmin:'Import données',diffusion:'Diffusion & alertes',users:'Accès & droits',pilotage:'Pilotage mensuel',vdash:'Dashboard Valyn',master:'Master Data',control:'Analyse & contrôle',coherence:'Cohérence intermensuelle',docs:'Bibliothèque de preuves'};
 const AV_COLORS={admin:{bg:'linear-gradient(135deg,#efc900,#ffe066)',fg:'#151922'},client:{bg:'linear-gradient(135deg,#111827,#374151)',fg:'#ffffff'}};
 function initials(n){return (n.replace(/[^\p{L}\s]/gu,'').trim().split(/\s+/).map(w=>w[0]).filter(Boolean).slice(0,2).join('')||'?').toUpperCase();}
 function grant(list){const r={};CLIENT_CAPS.concat(ADMIN_CAPS).forEach(c=>r[c]=false);list.forEach(c=>r[c]=true);return r;}
