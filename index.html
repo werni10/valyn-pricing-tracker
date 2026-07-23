@@ -130,6 +130,10 @@
   .col-picker-panel label:hover{background:var(--bg)}
   .col-picker-panel label input:disabled{opacity:.5}
   .col-picker-panel label.locked{color:var(--muted);cursor:default}
+  th.sortable{cursor:pointer;user-select:none}
+  th.sortable:hover{color:var(--ink)}
+  .sort-arrow{font-size:9px;margin-left:4px;opacity:.4;display:inline-block}
+  .sort-arrow.active{opacity:1;color:var(--focus)}
   .field{background:white;border:1px solid var(--line);border-radius:14px;padding:11px 12px;min-width:170px;outline:none;font-weight:700;color:#1f2937;font-family:inherit;font-size:13px}
   .field:focus{border-color:var(--orange)}
   .search{min-width:280px}
@@ -432,16 +436,16 @@
         <div class="table-wrap">
           <table id="trackedTable">
             <thead><tr>
-              <th data-col="finition">Finition <span class="info-dot" tabindex="0" data-tip="Identifiant unique : marque + modèle + motorisation + finition.">i</span></th>
-              <th data-col="segment">Segment</th>
-              <th data-col="statut">Statut</th>
-              <th data-col="showroom" class="num">Prix showroom TTC <span class="info-dot" tabindex="0" data-tip="Prix affiché showroom / brochure, toutes taxes comprises.">i</span></th>
-              <th data-col="remise" class="num">Remise % <span class="info-dot" tabindex="0" data-tip="Remise totale sur prix HT (showroom → remisé).">i</span></th>
-              <th data-col="remiseComm" class="num">Remise comm. réelle <span class="info-dot" tabindex="0" data-tip="Part purement commerciale de la remise, hors optimisation de la taxe de luxe.">i</span></th>
-              <th data-col="luxe" class="num">Taxe luxe <span class="info-dot" tabindex="0" data-tip="Taxe proportionnelle marocaine appliquée au prix remisé HT (thermique).">i</span></th>
-              <th data-col="cem" class="num">Prix CEM <span class="info-dot" tabindex="0" data-tip="Prix clé en main = remisé TTC + (frais immat + taxe luxe) × 1,2.">i</span></th>
-              <th data-col="indice" class="num">Indice segment <span class="info-dot" tabindex="0" data-tip="CEM vs moyenne CEM du segment (100 = moyenne).">i</span></th>
-              <th data-col="lecture">Lecture remise</th>
+              <th data-col="finition" class="sortable" onclick="sortTracked('finition')">Finition <span class="info-dot" tabindex="0" data-tip="Identifiant unique : marque + modèle + motorisation + finition.">i</span><span class="sort-arrow" id="sortArrow-finition">⇅</span></th>
+              <th data-col="segment" class="sortable" onclick="sortTracked('segment')">Segment<span class="sort-arrow" id="sortArrow-segment">⇅</span></th>
+              <th data-col="statut" class="sortable" onclick="sortTracked('statut')">Statut<span class="sort-arrow" id="sortArrow-statut">⇅</span></th>
+              <th data-col="showroom" class="num sortable" onclick="sortTracked('showroom')">Prix showroom TTC <span class="info-dot" tabindex="0" data-tip="Prix affiché showroom / brochure, toutes taxes comprises.">i</span><span class="sort-arrow" id="sortArrow-showroom">⇅</span></th>
+              <th data-col="remise" class="num sortable" onclick="sortTracked('remise')">Remise % <span class="info-dot" tabindex="0" data-tip="Remise totale sur prix HT (showroom → remisé).">i</span><span class="sort-arrow" id="sortArrow-remise">⇅</span></th>
+              <th data-col="remiseComm" class="num sortable" onclick="sortTracked('remiseComm')">Remise comm. réelle <span class="info-dot" tabindex="0" data-tip="Part purement commerciale de la remise, hors optimisation de la taxe de luxe.">i</span><span class="sort-arrow" id="sortArrow-remiseComm">⇅</span></th>
+              <th data-col="luxe" class="num sortable" onclick="sortTracked('luxe')">Taxe luxe <span class="info-dot" tabindex="0" data-tip="Taxe proportionnelle marocaine appliquée au prix remisé HT (thermique).">i</span><span class="sort-arrow" id="sortArrow-luxe">⇅</span></th>
+              <th data-col="cem" class="num sortable" onclick="sortTracked('cem')">Prix CEM <span class="info-dot" tabindex="0" data-tip="Prix clé en main = remisé TTC + (frais immat + taxe luxe) × 1,2.">i</span><span class="sort-arrow" id="sortArrow-cem">⇅</span></th>
+              <th data-col="indice" class="num sortable" onclick="sortTracked('indice')">Indice segment <span class="info-dot" tabindex="0" data-tip="CEM vs moyenne CEM du segment (100 = moyenne).">i</span><span class="sort-arrow" id="sortArrow-indice">⇅</span></th>
+              <th data-col="lecture" class="sortable" onclick="sortTracked('lecture')">Lecture remise<span class="sort-arrow" id="sortArrow-lecture">⇅</span></th>
               <th data-col="preuve">Preuve</th>
             </tr></thead>
             <tbody id="trackedBody"></tbody>
@@ -1409,6 +1413,37 @@ function applyTrackedColVisibility(){
   });
 }
 document.addEventListener('click',()=>{const p=document.getElementById('colPickerPanel'); if(p) p.classList.remove('open');});
+// click a header to sort by it (high->low first click, low->high on the second); click a
+// different header to switch columns. 'preuve' is an action button, not sortable data.
+let TRACKED_SORT={key:null,dir:'desc'};
+function sortTracked(key){
+  if(TRACKED_SORT.key===key) TRACKED_SORT.dir=(TRACKED_SORT.dir==='desc'?'asc':'desc');
+  else { TRACKED_SORT.key=key; TRACKED_SORT.dir='desc'; }
+  renderTracked();
+}
+function trackedSortValue(v,M,key){
+  const c=vehMonth(v,M).e, st=statut(v,M), ix=indice(v,M);
+  switch(key){
+    case 'finition': return (v.modele+' '+v.finition).toLowerCase();
+    case 'segment': return v.segment.toLowerCase();
+    case 'statut': return st.toLowerCase();
+    case 'showroom': return c.pvpTTC;
+    case 'remise': return c.remise;
+    case 'remiseComm': return c.AB;
+    case 'luxe': return c.S;
+    case 'cem': return c.CEM;
+    case 'indice': return ix==null?-Infinity:ix;
+    case 'lecture': return lectureRemise(c).toLowerCase();
+    default: return 0;
+  }
+}
+function applyTrackedSortIndicators(){
+  TRACKED_COLS.forEach(c=>{
+    const el=document.getElementById('sortArrow-'+c.key); if(!el) return;
+    if(TRACKED_SORT.key===c.key){ el.textContent=TRACKED_SORT.dir==='asc'?'▲':'▼'; el.classList.add('active'); }
+    else { el.textContent='⇅'; el.classList.remove('active'); }
+  });
+}
 function renderTracked(){
   fillMonthSelector();
   const M=viewMonth();
@@ -1433,6 +1468,14 @@ function renderTracked(){
     if(flux==='non'&&c.S>0) return false;
     return true;
   });
+  if(TRACKED_SORT.key){
+    const k=TRACKED_SORT.key, dir=TRACKED_SORT.dir;
+    list.sort((v1,v2)=>{
+      const a=trackedSortValue(v1,M,k), b=trackedSortValue(v2,M,k);
+      const cmp=(typeof a==='string')?a.localeCompare(b):(a-b);
+      return dir==='asc'?cmp:-cmp;
+    });
+  }
   document.getElementById('trkCount').innerText=`${list.length} référence(s)`;
   document.getElementById('trackedBody').innerHTML=list.map(v=>{
     const c=vehMonth(v,M).e; const st=statut(v,M); const ix=indice(v,M);
@@ -1452,6 +1495,7 @@ function renderTracked(){
     </tr>`;
   }).join('');
   applyTrackedColVisibility();
+  applyTrackedSortIndicators();
 }
 function lectureRemise(c){
   if(c.AA===0) return 'Purement commerciale';
