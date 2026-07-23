@@ -2235,6 +2235,14 @@ function periodToMMYY(period){
   const m=/^(\d{4})-(\d{2})$/.exec(period||'');
   return m?m[2]+'.'+m[1].slice(2):'';
 }
+// reverse: pull a 'MM.YY' token out of a sheet name like 'Input Data 06.26' -> '2026-06'
+function sheetNameToPeriod(sheetName){
+  const m=/(\d{2})\.(\d{2})\b/.exec(sheetName||'');
+  if(!m) return null;
+  const mm=m[1], yy=m[2];
+  if(+mm<1||+mm>12) return null;
+  return '20'+yy+'-'+mm;
+}
 function buildKeyVersionMap(wb){
   const rn=wb.SheetNames.find(n=>/ref.*segment|segment.*ref/i.test(n));
   if(!rn)return null;
@@ -2250,6 +2258,7 @@ function buildKeyVersionMap(wb){
   return map;
 }
 let PENDING_UPLOAD=null;
+let MONTH_MISMATCH_NOTICE=null;
 let xlsxLoadPromise=null;
 // SheetJS is ~1MB; only admins touch xlsx import, and CSV never needs it — load on first real use.
 function ensureXLSX(){
@@ -2289,11 +2298,23 @@ async function handleFile(file){
           ||wb.SheetNames[0];
         rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''}).filter(r=>r.some(c=>String(c).trim()));
         refMap=buildKeyVersionMap(wb);
+        // the sheet name is the ground truth for which month this data is — if it
+        // disagrees with the "Mois à publier" selector, snap the selector to match
+        // instead of silently filing the data under the wrong month.
+        const detected=sheetNameToPeriod(sn);
+        if(detected && targetSel && targetSel.value!==detected){
+          if(!targetSel.querySelector(`option[value="${detected}"]`)){
+            const o=document.createElement('option'); o.value=detected; o.textContent=MLABEL[detected]||ensureLabel(detected);
+            targetSel.appendChild(o);
+          }
+          targetSel.value=detected;
+          MONTH_MISMATCH_NOTICE=`Mois détecté depuis le fichier : <strong>${MLABEL[detected]||detected}</strong> (sélecteur ajusté automatiquement).`;
+        } else { MONTH_MISMATCH_NOTICE=null; }
       }
       const recs=rowsToRecords(rows,refMap);
       if(!recs.length){status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Aucune ligne exploitable. Vérifiez les colonnes (Marque, Modèle, Prix Showroom TTC, Prix remisé TTC CEM).</div>';return;}
       PENDING_UPLOAD=recs;
-      status.innerHTML=`<div class="empty-note" style="text-align:left"><strong>${recs.length} finition(s)</strong> détectée(s) et prêtes à publier.</div>`;
+      status.innerHTML=`<div class="empty-note" style="text-align:left"><strong>${recs.length} finition(s)</strong> détectée(s) et prêtes à publier.</div>${MONTH_MISMATCH_NOTICE?`<div class="empty-note" style="text-align:left;color:var(--focus);margin-top:6px">⚠ ${MONTH_MISMATCH_NOTICE}</div>`:''}`;
       document.getElementById('uploadPreview').innerHTML=`<div class="table-wrap" style="margin-top:12px;max-height:280px"><table><thead><tr><th>Marque</th><th>Modèle</th><th>Finition</th><th>Segment</th><th class="num">Showroom</th><th class="num">CEM</th><th class="num">Remise calc.</th></tr></thead><tbody>${recs.map(r=>{const rem=solveRemiseFromCEM(r.showroom,0,r.fi,r.type,r.cemObs);return `<tr><td>${r.marque}</td><td>${r.modele}</td><td>${r.finition}</td><td>${r.segment}</td><td class="num">${fmt(r.showroom)}</td><td class="num">${fmt(r.cemObs)}</td><td class="num">${fmtP(rem)}</td></tr>`;}).join('')}</tbody></table></div>
         <button class="btn btn-primary" style="margin-top:14px" onclick="publishUpload()">✓ Importer les données</button>`;
     }catch(err){status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Erreur de lecture : '+err.message+'</div>';}
@@ -2343,7 +2364,7 @@ async function publishUpload(){
   }
   if(sel) sel.value=''; // drop the stale selection so the target selector snaps to the current working period
   fillSelectOnce();renderAll();
-  PENDING_UPLOAD=null;document.getElementById('uploadPreview').innerHTML='';document.getElementById('uploadStatus').innerHTML='<div class="empty-note" style="text-align:left;color:var(--green)">✓ '+n+' finition(s) importée(s) pour '+(MLABEL[period]||period)+'. Passez par <strong>Pilotage</strong> pour valider le contrôle et transmettre au client.</div>';
+  PENDING_UPLOAD=null;MONTH_MISMATCH_NOTICE=null;document.getElementById('uploadPreview').innerHTML='';document.getElementById('uploadStatus').innerHTML='<div class="empty-note" style="text-align:left;color:var(--green)">✓ '+n+' finition(s) importée(s) pour '+(MLABEL[period]||period)+'. Passez par <strong>Pilotage</strong> pour valider le contrôle et transmettre au client.</div>';
   showToast(n+' finition(s) importée(s) — direction Pilotage pour publier');
   renderDataAdmin();
 }
