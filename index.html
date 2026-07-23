@@ -5,7 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Valyn Advisory — Auto Nejma · Tracker Prix Transactionnels</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="config.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
     --black:#0b0f17;--black2:#111827;--ink:#151922;
@@ -25,7 +29,7 @@
       radial-gradient(circle at top left, rgba(239,201,0,.12), transparent 32%),
       linear-gradient(180deg,#fbfbfc 0%,#f3f4f7 100%);
     color:var(--ink);
-    font-family:Inter,"Segoe UI",Arial,sans-serif;
+    font-family:"Quicksand","Segoe UI",Arial,sans-serif;
     overflow-x:hidden;
   }
   .shell{display:grid;grid-template-columns:292px 1fr;min-height:100vh}
@@ -160,7 +164,7 @@
   .metric span{display:block;color:var(--muted);font-size:12px;font-weight:800}
   .metric b{display:block;font-size:19px;margin-top:6px}
   .spark{height:130px;border-radius:18px;background:linear-gradient(180deg,rgba(239,201,0,.08),transparent),repeating-linear-gradient(0deg,#f3f4f6 0,#f3f4f6 1px,transparent 1px,transparent 27px);position:relative;overflow:hidden;border:1px solid #eef0f4;margin:14px 0 8px}
-  .spark svg{width:100%;height:100%}
+  .spark svg,.spark canvas{width:100%;height:100%;display:block}
   .spark-legend{display:flex;gap:16px;font-size:12px;font-weight:800;color:var(--muted);margin-bottom:14px}
   .spark-legend i{display:inline-block;width:14px;height:4px;border-radius:2px;margin-right:5px;vertical-align:middle}
   .doc-list{display:grid;gap:9px}
@@ -346,9 +350,11 @@
 
     <div class="toolbar">
       <button class="btn btn-primary" onclick="runAnalysis()">▶ Recalculer l'analyse</button>
-      <button class="btn btn-light" onclick="exportCSV()">⇩ Export Excel (CSV)</button>
-      <button class="btn btn-light" onclick="window.print()">⇩ Export PDF / impression</button>
       <button class="btn btn-dark" onclick="openModal('proofModal')">Voir justificatif exemple</button>
+      <div style="margin-left:auto;display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-light" onclick="exportCSV()">⇩ Export Excel (CSV)</button>
+        <button class="btn btn-light" onclick="window.print()">⇩ Export PDF / impression</button>
+      </div>
     </div>
 
     <!-- DASHBOARD -->
@@ -413,19 +419,23 @@
 
     <!-- HISTORY -->
     <section class="page" id="history">
-      <div class="grid two-col">
-        <div class="card">
-          <div class="section-head"><div><h3>Analyse historique par finition</h3><p>Évolution mensuelle calculée (prix public, CEM, remise).</p></div></div>
-          <div class="filters">
-            <select class="field" id="histSel" onchange="renderHistory()"></select>
-          </div>
-          <div class="spark-legend"><span><i style="background:#efc900"></i>Prix CEM</span><span><i style="background:#111827"></i>Prix showroom TTC</span></div>
-          <div class="spark" id="histSpark"></div>
-          <div class="grid three-col" id="histMetrics"></div>
+      <div class="card">
+        <div class="section-head"><div><h3>Analyse historique par finition</h3><p>Évolution mensuelle calculée (prix showroom, remise, prix CEM). Cliquez sur une ligne pour dérouler le graphique.</p></div></div>
+        <div class="filters">
+          <input class="field search" id="histSearch" placeholder="Rechercher marque, modèle, finition..." oninput="renderHistory()">
+          <select class="field" id="histBrand" onchange="renderHistory()"><option value="">Toutes marques</option></select>
         </div>
-        <div class="card">
-          <div class="section-head"><div><h3>Lecture Valyn</h3><p>Commentaire stratégique généré à partir des indicateurs.</p></div></div>
-          <div class="alert-stack" id="histRead"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Finition</th>
+              <th class="num" id="histTh1a">Showroom</th><th class="num" id="histTh1b">Showroom</th>
+              <th class="num" id="histTh2a">Remise</th><th class="num" id="histTh2b">Remise</th>
+              <th class="num" id="histTh3a">Prix CEM</th><th class="num" id="histTh3b">Prix CEM</th>
+              <th>Évolution</th>
+            </tr></thead>
+            <tbody id="histBody"></tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -453,7 +463,7 @@
     <!-- PRICE INDEX -->
     <section class="page" id="priceindex">
       <div class="card">
-        <div class="section-head"><div><h3>Price Index par segment</h3><p>Positionnement du prix transactionnel Auto Nejma vs concurrence directe. Indice 1,00 = référence la plus compétitive du segment.</p></div></div>
+        <div class="section-head"><div><h3>Price Index par segment</h3><p>Positionnement du prix transactionnel Auto Nejma vs concurrence directe. Indice 100 = référence la plus compétitive du segment.</p></div></div>
         <div id="priceIndexBody"></div>
       </div>
     </section>
@@ -745,6 +755,12 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
       <div class="grid two-col">
         <div class="card">
           <div class="section-head"><div><h3>Référentiel véhicules</h3><p>Marques, modèles, finitions, motorisations et segments suivis.</p></div></div>
+          <div class="filters">
+            <input class="field search" id="masterSearch" placeholder="Rechercher modèle, finition..." oninput="renderMaster()">
+            <select class="field" id="masterBrand" onchange="renderMaster()"><option value="">Toutes marques</option></select>
+            <select class="field" id="masterSeg" onchange="renderMaster()"><option value="">Tous segments</option></select>
+            <select class="field" id="masterStatut" onchange="renderMaster()"><option value="">Tous statuts</option><option value="actif">Actif</option><option value="inactif">Inactif</option></select>
+          </div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Marque</th><th>Modèle</th><th>Finition</th><th>Motorisation</th><th>Segment</th><th>Rôle</th><th>Statut</th><th></th></tr></thead>
@@ -907,7 +923,8 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
   <span class="chip chip-alert">Analyse historique</span>
   <div class="metric-list" id="hpMetrics"></div>
   <h4>Évolution prix CEM</h4>
-  <div class="spark" id="hpSpark"></div>
+  <div class="spark-legend"><span><i style="background:#efc900"></i>Prix CEM</span><span><i style="background:#111827"></i>Prix showroom TTC</span></div>
+  <div class="spark" id="hpSpark"><canvas id="hpSparkCanvas"></canvas></div>
   <h4 style="margin-top:20px">Décomposition de la remise (mois courant)</h4>
   <div class="breakdown" id="hpBreakdown"></div>
   <h4 style="margin-top:20px">Justificatifs attachés</h4>
@@ -1163,13 +1180,16 @@ function renderKPI(){
     {lab:'Alertes flash', tip:'Signaux pricing / fiscaux générés automatiquement ce mois.', val:alerts.length, trend:`sur ${MLABEL[CURRENT]||CURRENT}`, cls:'amber'},
     {lab:'Sélection '+(MLABEL[wp]||wp), tip:'Périmètre choisi pour l\'analyse du mois prochain.', val:selDone?selCount+' ✓':selCount+' choisie(s)', trend:selDone?'Sélection transmise':'À transmettre', cls:selDone?'green':'red'}
   ];
+  destroyChart('kpiSparkCanvas');
   document.getElementById('kpiRow').innerHTML = kpis.map(k=>`
     <div class="card kpi">
       <div class="label">${k.lab} <span class="info-dot" tabindex="0" data-tip="${k.tip}">i</span></div>
       <div class="value">${k.val}</div>
       <div class="trend ${k.cls}">${k.trend}</div>
-      ${k.spark?`<div class="spark">${sparkSVG([k.spark],['#efc900'],140,36,4)}</div>`:''}
+      ${k.spark?`<div class="spark"><canvas id="kpiSparkCanvas"></canvas></div>`:''}
     </div>`).join('');
+  const sparkKpi=kpis.find(k=>k.spark);
+  if(sparkKpi) renderSparkChart('kpiSparkCanvas',sparkKpi.spark,'#efc900');
 }
 // Prototype-style monthly reports timeline: each transmitted month + the one in prep.
 function renderReportsTimeline(){
@@ -1249,8 +1269,8 @@ function fillSelectOnce(){
   const segs=[...new Set(VEHICLES.map(v=>v.segment))];
   document.getElementById('trackedBrand').innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${b}</option>`).join('');
   document.getElementById('trackedSeg').innerHTML='<option value="">Tous segments</option>'+segs.map(s=>`<option>${s}</option>`).join('');
-  const hist=document.getElementById('histSel');
-  hist.innerHTML=VEHICLES.filter(v=>Object.keys(v.months).length>1).map(v=>`<option value="${v.id}">${v.marque} ${v.modele} ${v.finition}</option>`).join('');
+  fillHistFilters();
+  fillMasterFilters();
   fillUploadVehicles();
 }
 function statutChip(s){
@@ -1304,21 +1324,44 @@ function lectureRemise(c){
 }
 
 /* ================= HISTORY PANEL ================= */
-function sparkSVG(series, colors, w=460, h=118, pad=8){
-  const flat=series.flat().filter(x=>x!=null&&!isNaN(x));
-  if(!flat.length) return '<svg></svg>';
-  const min=Math.min(...flat), max=Math.max(...flat), rng=(max-min)||1;
-  const pts=(arr)=>arr.map((y,i)=>{
-    if(y==null||isNaN(y)) return null;
-    const x=pad+i*(w-2*pad)/(arr.length-1||1);
-    const yy=h-pad-((y-min)/rng)*(h-2*pad);
-    return `${x.toFixed(1)},${yy.toFixed(1)}`;
-  }).filter(Boolean).join(' ');
-  let svg=`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">`;
-  series.forEach((arr,i)=>{ svg+=`<polyline points="${pts(arr)}" fill="none" stroke="${colors[i]}" stroke-width="${i===0?4:3}" stroke-linejoin="round"/>`; });
-  const last=series[0]; const li=last.map((y,i)=>({y,i})).filter(o=>o.y!=null).pop();
-  if(li){ const x=pad+li.i*(w-2*pad)/(last.length-1||1); const yy=h-pad-((li.y-min)/rng)*(h-2*pad); svg+=`<circle cx="${x.toFixed(1)}" cy="${yy.toFixed(1)}" r="5" fill="${colors[0]}"/>`; }
-  return svg+'</svg>';
+const CHART_REGISTRY={};
+function destroyChart(canvasId){ if(CHART_REGISTRY[canvasId]){ CHART_REGISTRY[canvasId].destroy(); delete CHART_REGISTRY[canvasId]; } }
+function hexA(hex,alpha){ return hex+alpha; } // hex + 2-digit alpha suffix, e.g. '#efc900'+'33'
+// small trend-only line, no axes/legend/tooltip — used in KPI cards
+function renderSparkChart(canvasId,data,color){
+  destroyChart(canvasId);
+  const canvas=document.getElementById(canvasId); if(!canvas||typeof Chart==='undefined') return;
+  const ctx=canvas.getContext('2d');
+  const grad=ctx.createLinearGradient(0,0,0,canvas.clientHeight||36);
+  grad.addColorStop(0,hexA(color,'55')); grad.addColorStop(1,hexA(color,'00'));
+  CHART_REGISTRY[canvasId]=new Chart(ctx,{type:'line',data:{labels:data.map((_,i)=>i),
+    datasets:[{data,borderColor:color,backgroundColor:grad,borderWidth:2.5,fill:true,tension:.4,pointRadius:0,spanGaps:true}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:false},tooltip:{enabled:false}},
+      scales:{x:{display:false},y:{display:false}}}});
+}
+// full trend chart with month labels, gridlines and tooltips — used in history views
+function renderTrendChart(canvasId,months,series){
+  destroyChart(canvasId);
+  const canvas=document.getElementById(canvasId); if(!canvas||typeof Chart==='undefined') return;
+  const ctx=canvas.getContext('2d');
+  const labels=months.map(m=>MLABEL[m]||m);
+  const datasets=series.map(s=>{
+    const grad=ctx.createLinearGradient(0,0,0,canvas.clientHeight||130);
+    grad.addColorStop(0,hexA(s.color,'33')); grad.addColorStop(1,hexA(s.color,'00'));
+    return {label:s.label,data:s.data,borderColor:s.color,backgroundColor:grad,borderWidth:s.width||3,
+      fill:!!s.fill,tension:.35,pointRadius:3,pointHoverRadius:5,pointBackgroundColor:s.color,
+      pointBorderColor:'#fff',pointBorderWidth:1.5,spanGaps:true};
+  });
+  CHART_REGISTRY[canvasId]=new Chart(ctx,{type:'line',data:{labels,datasets},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},
+        tooltip:{backgroundColor:'#111827',padding:10,cornerRadius:10,titleFont:{family:'Quicksand',weight:'700'},bodyFont:{family:'Quicksand'},
+          callbacks:{label:(c)=>c.dataset.label+' : '+fmt(c.parsed.y)}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{family:'Quicksand',size:10},color:'#8892a4'}},
+        y:{grid:{color:'#eef0f4'},ticks:{font:{family:'Quicksand',size:10},color:'#8892a4',callback:(v)=>(v/1000).toFixed(0)+'k'}}}}});
 }
 function seriesFor(v){
   const cem=[], show=[];
@@ -1327,7 +1370,6 @@ function seriesFor(v){
 }
 function openHistory(id){
   const v=VEHICLES.find(x=>x.id===id); if(!v) return;
-  document.getElementById('histSel').value=id;
   const c=vehMonth(v,CURRENT); const e=c.e; const ix=indice(v,CURRENT);
   document.getElementById('hpTitle').innerText=`${v.modele} ${v.finition}`;
   document.getElementById('hpMeta').innerText=`${v.marque} · ${v.segment} · ${v.motor}`;
@@ -1337,7 +1379,7 @@ function openHistory(id){
     <div class="metric"><span>Indice segment</span><b>${ix==null?'—':ix.toFixed(0)}</b></div>
     <div class="metric"><span>Taxe de luxe</span><b>${e.S>0?fmt(e.S):'0'}</b></div>`;
   const s=seriesFor(v);
-  document.getElementById('hpSpark').innerHTML=sparkSVG([s.cem,s.show],['#efc900','#111827']);
+  renderTrendChart('hpSparkCanvas',MONTHS,[{label:'Prix CEM',data:s.cem,color:'#efc900',fill:true},{label:'Prix showroom TTC',data:s.show,color:'#111827',fill:false}]);
   document.getElementById('hpBreakdown').innerHTML=breakdownHTML(e);
   document.getElementById('hpComment').innerText=v.comment||'—';
   const vDocs=visibleDocs().filter(d=>d.vehicleId===id);
@@ -1361,18 +1403,60 @@ function breakdownHTML(e){
 }
 
 /* ================= HISTORY PAGE ================= */
+function fillHistFilters(){
+  const sel=document.getElementById('histBrand'); if(!sel) return;
+  const brands=[...new Set(VEHICLES.filter(v=>Object.keys(v.months).length>1).map(v=>v.marque))].sort();
+  const prev=sel.value;
+  sel.innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${b}</option>`).join('');
+  sel.value=brands.includes(prev)?prev:'';
+}
 function renderHistory(){
-  const id=document.getElementById('histSel').value||VEHICLES[0].id;
-  const v=VEHICLES.find(x=>x.id===id); const s=seriesFor(v);
-  document.getElementById('histSpark').innerHTML=sparkSVG([s.cem,s.show],['#efc900','#111827'],440,120);
-  // averages over available months
-  const cems=s.cem.filter(x=>x!=null), rems=MONTHS.map(m=>{const x=vehMonth(v,m);return x&&x.e?x.e.remise:null;}).filter(x=>x!=null);
-  const cur=vehMonth(v,CURRENT)||vehMonth(v,'2026-05'); const ix=indice(v,CURRENT);
-  document.getElementById('histMetrics').innerHTML=`
-    <div class="metric"><span>Prix CEM actuel</span><b>${cur&&cur.e?fmtK(cur.e.CEM):'—'}</b></div>
-    <div class="metric"><span>Remise moyenne</span><b>${rems.length?fmtP(rems.reduce((a,b)=>a+b,0)/rems.length):'—'}</b></div>
-    <div class="metric"><span>Indice segment</span><b>${ix==null?'—':ix.toFixed(0)}</b></div>`;
-  // reading
+  const body=document.getElementById('histBody'); if(!body) return;
+  const first=MONTHS[0], last=CURRENT;
+  const fl=MLABEL[first]||first, ll=MLABEL[last]||last;
+  ['1','2','3'].forEach((n,i)=>{
+    const suffix=['Showroom','Remise','Prix CEM'][i];
+    const a=document.getElementById('histTh'+n+'a'), b=document.getElementById('histTh'+n+'b');
+    if(a) a.innerText=fl+' '+suffix; if(b) b.innerText=ll+' '+suffix;
+  });
+  const q=(document.getElementById('histSearch')?.value||'').toLowerCase();
+  const brand=document.getElementById('histBrand')?.value||'';
+  const rows=VEHICLES.filter(v=>Object.keys(v.months).length>1).filter(v=>{
+    if(brand&&v.marque!==brand) return false;
+    if(q&&!(`${v.marque} ${v.modele} ${v.finition}`.toLowerCase().includes(q))) return false;
+    return true;
+  });
+  body.innerHTML=rows.map(v=>{
+    const mf=vehMonth(v,first), ml=vehMonth(v,last);
+    const ef=mf&&mf.e, el=ml&&ml.e;
+    const dCem=(ef&&el&&ef.CEM)?((el.CEM-ef.CEM)/ef.CEM):0;
+    const dShow=(ef&&el&&ef.pvpTTC)?((el.pvpTTC-ef.pvpTTC)/ef.pvpTTC):0;
+    const dRem=(ef&&el)?(el.remise-ef.remise):0;
+    const tg=(ef&&el)?tag(dCem,dShow,dRem):{t:'Historique insuffisant',c:'chip-muted'};
+    return `<tr class="clk" tabindex="0" role="button" aria-label="Dérouler l'historique de ${v.modele} ${v.finition}" onclick="toggleHistRow('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleHistRow('${v.id}')}">
+      <td><strong>${v.marque} ${v.modele} ${v.finition}</strong></td>
+      <td class="num">${ef?fmt(ef.pvpTTC):'—'}</td><td class="num">${el?fmt(el.pvpTTC):'—'}</td>
+      <td class="num">${ef?fmtP(ef.remise):'—'}</td><td class="num">${el?fmtP(el.remise):'—'}</td>
+      <td class="num">${ef?fmt(ef.CEM):'—'}</td><td class="num">${el?fmt(el.CEM):'—'}</td>
+      <td><span class="chip ${tg.c}">${tg.t}</span></td>
+    </tr>
+    <tr id="histExpand-${v.id}" style="display:none"><td colspan="8" id="histExpandBody-${v.id}"></td></tr>`;
+  }).join('')||'<tr><td colspan="8" class="empty-note">Aucun résultat pour ces filtres.</td></tr>';
+}
+function toggleHistRow(id){
+  const row=document.getElementById('histExpand-'+id); if(!row) return;
+  const wasOpen=row.style.display!=='none';
+  document.querySelectorAll('[id^="histExpand-"]').forEach(r=>r.style.display='none');
+  if(wasOpen) return;
+  row.style.display='table-row';
+  document.getElementById('histExpandBody-'+id).innerHTML=histDetailHTML(id);
+  const v=VEHICLES.find(x=>x.id===id);
+  if(v){ const s=seriesFor(v); renderTrendChart('histChart-'+id,MONTHS,[{label:'Prix CEM',data:s.cem,color:'#efc900',fill:true},{label:'Prix showroom TTC',data:s.show,color:'#111827',fill:false}]); }
+}
+function histDetailHTML(id){
+  const v=VEHICLES.find(x=>x.id===id); if(!v) return '';
+  const rems=MONTHS.map(m=>{const x=vehMonth(v,m);return x&&x.e?x.e.remise:null;}).filter(x=>x!=null);
+  const cur=vehMonth(v,CURRENT)||vehMonth(v,MONTHS[MONTHS.length-2]); const ix=indice(v,CURRENT);
   const e=cur&&cur.e?cur.e:null; const reads=[];
   if(e){
     if(indice(v,CURRENT)>100) reads.push({n:'1',t:'Positionnement premium',p:`La finition reste au-dessus de la moyenne segment (indice ${indice(v,CURRENT).toFixed(0)}).`});
@@ -1381,7 +1465,18 @@ function renderHistory(){
     else reads.push({n:'2',t:'Effort commercial réel',p:`La remise est surtout commerciale (${fmtP(e.AB)}). Soutien concessionnaire visible sur cette finition.`});
     reads.push({n:'3',t:'Action recommandée',p: e.AB>0.08? 'Surveiller de près les offres concurrentes directes ; niveau de remise agressif.' : 'Maintenir le suivi ; pas de réaction prix immédiate nécessaire.'});
   } else { reads.push({n:'—',t:'Hors scope ce mois',p:v.comment||'Finition non disponible sur le mois courant.'}); }
-  document.getElementById('histRead').innerHTML=reads.map(r=>`<div class="alert"><div class="alert-ico">${r.n}</div><div><h4>${r.t}</h4><p>${r.p}</p></div></div>`).join('');
+  return `<div class="grid two-col" style="margin:6px 0 2px">
+    <div>
+      <div class="spark-legend"><span><i style="background:#efc900"></i>Prix CEM</span><span><i style="background:#111827"></i>Prix showroom TTC</span></div>
+      <div class="spark"><canvas id="histChart-${id}"></canvas></div>
+      <div class="grid three-col" style="margin-top:10px">
+        <div class="metric"><span>Prix CEM actuel</span><b>${cur&&cur.e?fmtK(cur.e.CEM):'—'}</b></div>
+        <div class="metric"><span>Remise moyenne</span><b>${rems.length?fmtP(rems.reduce((a,b)=>a+b,0)/rems.length):'—'}</b></div>
+        <div class="metric"><span>Indice segment</span><b>${ix==null?'—':ix.toFixed(0)}</b></div>
+      </div>
+    </div>
+    <div class="alert-stack">${reads.map(r=>`<div class="alert"><div class="alert-ico">${r.n}</div><div><h4>${r.t}</h4><p>${r.p}</p></div></div>`).join('')}</div>
+  </div>`;
 }
 
 /* ================= COMPARE M/M-1 ================= */
@@ -1426,7 +1521,7 @@ function priceIndexRows(seg){
   });
   const valid=rows.filter(r=>!r.na && r.transac>0);
   const min=valid.length?Math.min(...valid.map(r=>r.transac)):0;
-  rows.forEach(r=>{ if(!r.na && min){ r.indice=r.transac/min; r.ecart=r.transac-min; } });
+  rows.forEach(r=>{ if(!r.na && min){ r.indice=r.transac/min*100; r.ecart=r.transac-min; } });
   rows.sort((a,b)=>((a.transac||1e15)-(b.transac||1e15)));
   rows.forEach((r,i)=>r.pos=i+1);
   return rows;
@@ -1446,7 +1541,7 @@ function renderPriceIndex(){
           <td>${r.client?'<strong>'+r.name+'</strong> <span class="chip chip-ok">Auto Nejma</span>':r.name}</td>
           <td class="num">${fmt(r.pub)}</td><td class="num">${fmtP(r.remise)}</td><td class="num">${fmt(r.transac)}</td>
           <td class="num">${r.luxe>0?fmtP(r.luxe,0):'—'}</td>
-          <td class="num"><strong>${r.indice.toFixed(3)}</strong></td><td class="num">${r.pos}</td><td class="num">${r.ecart>0?'+'+fmt(r.ecart):'—'}</td>
+          <td class="num"><strong>${r.indice.toFixed(0)}</strong></td><td class="num">${r.pos}</td><td class="num">${r.ecart>0?'+'+fmt(r.ecart):'—'}</td>
         </tr>`;
       }).join('')}</tbody></table></div></div>`;
   }).join('');
@@ -2433,12 +2528,35 @@ function renderVdash(){
 }
 
 /* ================= MASTER DATA (Valyn) ================= */
+function fillMasterFilters(){
+  const brandSel=document.getElementById('masterBrand'), segSel=document.getElementById('masterSeg');
+  if(!brandSel||!segSel) return;
+  const brands=[...new Set(VEHICLES.map(v=>v.marque))].sort();
+  const segs=[...new Set(VEHICLES.map(v=>v.segment))].sort();
+  const pb=brandSel.value, ps=segSel.value;
+  brandSel.innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${b}</option>`).join('');
+  segSel.innerHTML='<option value="">Tous segments</option>'+segs.map(s=>`<option>${s}</option>`).join('');
+  brandSel.value=brands.includes(pb)?pb:''; segSel.value=segs.includes(ps)?ps:'';
+}
 function renderMaster(){
   const el=document.getElementById('masterBody'); if(!el) return;
-  el.innerHTML=VEHICLES.map(v=>{
+  const q=(document.getElementById('masterSearch')?.value||'').toLowerCase();
+  const brand=document.getElementById('masterBrand')?.value||'';
+  const seg=document.getElementById('masterSeg')?.value||'';
+  const statut=document.getElementById('masterStatut')?.value||'';
+  const rows=VEHICLES.filter(v=>{
+    const active=v.statutOverride!=='Arrêtée';
+    if(brand&&v.marque!==brand) return false;
+    if(seg&&v.segment!==seg) return false;
+    if(statut==='actif'&&!active) return false;
+    if(statut==='inactif'&&active) return false;
+    if(q&&!(`${v.marque} ${v.modele} ${v.finition} ${v.motor}`.toLowerCase().includes(q))) return false;
+    return true;
+  });
+  el.innerHTML=rows.map(v=>{
     const active=v.statutOverride!=='Arrêtée';
     return `<tr><td>${v.marque}</td><td>${v.modele}</td><td>${v.finition}</td><td>${v.motor}</td><td><span class="chip chip-seg">${v.segment}</span></td><td>${v.role==='catalog'?'Référence':'Suivi client'}</td><td>${active?'<span class="chip chip-ok">Actif</span>':'<span class="chip chip-muted">Inactif</span>'}</td><td><button class="btn btn-light" onclick="toggleMasterActive('${v.id}')">${active?'Désactiver':'Réactiver'}</button></td></tr>`;
-  }).join('');
+  }).join('')||'<tr><td colspan="8" class="empty-note">Aucun résultat pour ces filtres.</td></tr>';
 }
 async function addMasterVehicle(){
   const marque=document.getElementById('mMarque').value.trim().toUpperCase();
