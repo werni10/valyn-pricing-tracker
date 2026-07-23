@@ -1218,6 +1218,19 @@ function indice(v, m){
 function scope(m){ return VEHICLES.filter(v=>{const x=vehMonth(v,m); return x&&x.e;}); }
 
 /* ================= FORMATTERS ================= */
+// HTML-escape free text before it goes into innerHTML/attribute contexts. Vehicle
+// fields (marque, modele, finition, segment, comment...) originate from uploaded
+// Excel/CSV files and must never be trusted as markup.
+const ESC_MAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,c=>ESC_MAP[c]); }
+// CSV formula-injection guard: a cell whose text starts with =,+,-,@ (or tab/CR)
+// is executed as a formula by Excel/Sheets on open. Prefix with an apostrophe to
+// force plain-text — vehicle fields originate from uploaded files, never trust them.
+function csvCell(c){
+  let s=String(c==null?'':c);
+  if(/^[=+\-@\t\r]/.test(s)) s="'"+s;
+  return `"${s.replace(/"/g,'""')}"`;
+}
 const nf = new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0});
 function fmt(n){ return (n==null||isNaN(n))?'—':nf.format(Math.round(n)); }
 function fmtK(n){ return (n==null||isNaN(n))?'—':nf.format(Math.round(n/1000))+'k'; }
@@ -1297,7 +1310,7 @@ function renderTopMoves(){
     const w = Math.max(12, Math.abs(r.delta)/max*100);
     const cls = r.delta<0?'red':(r.delta>0?'green':'');
     const val = Math.abs(r.delta)<500?'stable':`${signed(r.delta/1000)}k`;
-    return `<div class="bar-row"><label>${r.v.modele} ${r.v.finition}</label><div class="bar-bg"><div class="bar-fill" style="width:${w}%"></div></div><b class="${cls}">${val}</b></div>`;
+    return `<div class="bar-row"><label>${esc(r.v.modele)} ${esc(r.v.finition)}</label><div class="bar-bg"><div class="bar-fill" style="width:${w}%"></div></div><b class="${cls}">${val}</b></div>`;
   }).join('') : '<div class="empty-note">Pas de comparatif M-1 disponible.</div>';
 }
 function renderTopRemises(){
@@ -1305,20 +1318,20 @@ function renderTopRemises(){
   const max = Math.max(...rows.map(r=>r.ab),0.01);
   document.getElementById('topRemises').innerHTML = rows.map(r=>{
     const w = Math.max(6, r.ab/max*100);
-    return `<div class="bar-row"><label>${r.v.modele} ${r.v.finition}</label><div class="bar-bg"><div class="bar-fill" style="width:${w}%"></div></div><b>${fmtP(r.ab)}</b></div>`;
+    return `<div class="bar-row"><label>${esc(r.v.modele)} ${esc(r.v.finition)}</label><div class="bar-bg"><div class="bar-fill" style="width:${w}%"></div></div><b>${fmtP(r.ab)}</b></div>`;
   }).join('');
 }
 function buildAlerts(){
   const out = [];
   scope(CURRENT).forEach(v=>{
     const c = vehMonth(v,CURRENT), p = v.months[PREV]?vehMonth(v,PREV):null;
-    if(c.e.AB>0.08) out.push({ico:'!',cls:'red',t:`Remise commerciale élevée — ${v.modele} ${v.finition}`,p:`Effort commercial réel de ${fmtP(c.e.AB)} (> seuil 8 %). Pression concurrentielle probable sur le segment ${v.segment}.`,prio:'élevée'});
-    if(p&&p.e){ const d=(c.e.CEM-p.e.CEM)/p.e.CEM; if(d<-0.03) out.push({ico:'▼',cls:'amber',t:`Baisse CEM significative — ${v.modele} ${v.finition}`,p:`Prix clé en main en recul de ${(d*100).toFixed(1)} % vs M-1 (${fmtK(p.e.CEM)} → ${fmtK(c.e.CEM)}).`,prio:'moyenne'}); }
+    if(c.e.AB>0.08) out.push({ico:'!',cls:'red',t:`Remise commerciale élevée — ${esc(v.modele)} ${esc(v.finition)}`,p:`Effort commercial réel de ${fmtP(c.e.AB)} (> seuil 8 %). Pression concurrentielle probable sur le segment ${esc(v.segment)}.`,prio:'élevée'});
+    if(p&&p.e){ const d=(c.e.CEM-p.e.CEM)/p.e.CEM; if(d<-0.03) out.push({ico:'▼',cls:'amber',t:`Baisse CEM significative — ${esc(v.modele)} ${esc(v.finition)}`,p:`Prix clé en main en recul de ${(d*100).toFixed(1)} % vs M-1 (${fmtK(p.e.CEM)} → ${fmtK(c.e.CEM)}).`,prio:'moyenne'}); }
     // approche palier taxe : remisé HT proche d'un seuil du barème
     const seuils=[400000,600000,800000,1000000];
-    seuils.forEach(s=>{ if(v.type==='Thermique' && c.e.P>=s*0.97 && c.e.P<=s*1.03) out.push({ico:'₮',cls:'amber',t:`Effet palier fiscal — ${v.modele} ${v.finition}`,p:`Prix remisé HT (${fmt(c.e.P)}) proche du seuil ${fmt(s)} : une remise supplémentaire peut basculer la taxe de luxe.`,prio:'moyenne'}); });
-    if(!v.months[PREV]) out.push({ico:'+',cls:'blue',t:`Nouvelle finition — ${v.modele} ${v.finition}`,p:`Ajoutée au périmètre ce mois. À suivre sur les prochains cycles.`,prio:'suivi'});
-    if(c.e.AA>0.05) out.push({ico:'◑',cls:'amber',t:`Remise fiscale dominante — ${v.modele} ${v.finition}`,p:`${fmtP(c.e.AA)} de la remise sert à optimiser la taxe de luxe (remise déguisée), pas un effort commercial réel.`,prio:'moyenne'});
+    seuils.forEach(s=>{ if(v.type==='Thermique' && c.e.P>=s*0.97 && c.e.P<=s*1.03) out.push({ico:'₮',cls:'amber',t:`Effet palier fiscal — ${esc(v.modele)} ${esc(v.finition)}`,p:`Prix remisé HT (${fmt(c.e.P)}) proche du seuil ${fmt(s)} : une remise supplémentaire peut basculer la taxe de luxe.`,prio:'moyenne'}); });
+    if(!v.months[PREV]) out.push({ico:'+',cls:'blue',t:`Nouvelle finition — ${esc(v.modele)} ${esc(v.finition)}`,p:`Ajoutée au périmètre ce mois. À suivre sur les prochains cycles.`,prio:'suivi'});
+    if(c.e.AA>0.05) out.push({ico:'◑',cls:'amber',t:`Remise fiscale dominante — ${esc(v.modele)} ${esc(v.finition)}`,p:`${fmtP(c.e.AA)} de la remise sert à optimiser la taxe de luxe (remise déguisée), pas un effort commercial réel.`,prio:'moyenne'});
   });
   return out;
 }
@@ -1334,7 +1347,7 @@ function renderAlerts(){
 function fillSelectOnce(){
   const brands=[...new Set(VEHICLES.filter(v=>v.role!=='catalog'||v.months[CURRENT]).map(v=>v.marque))];
   const segs=[...new Set(VEHICLES.map(v=>v.segment))];
-  document.getElementById('trackedBrand').innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${b}</option>`).join('');
+  document.getElementById('trackedBrand').innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${esc(b)}</option>`).join('');
   document.getElementById('trackedSeg').innerHTML='<option value="">Tous segments</option>'+segs.map(s=>`<option>${s}</option>`).join('');
   fillHistFilters();
   fillMasterFilters();
@@ -1480,9 +1493,9 @@ function renderTracked(){
   document.getElementById('trackedBody').innerHTML=list.map(v=>{
     const c=vehMonth(v,M).e; const st=statut(v,M); const ix=indice(v,M);
     const ixCls = ix==null?'':(ix>100?'red':'green');
-    return `<tr class="clk" tabindex="0" role="button" aria-label="Ouvrir l'historique de ${v.modele} ${v.finition}" onclick="openHistory('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHistory('${v.id}')}">
-      <td data-col="finition"><strong>${v.modele} ${v.finition}</strong><br><span style="color:var(--muted);font-size:11px">${v.marque} · ${v.motor}</span></td>
-      <td data-col="segment"><span class="chip chip-seg">${v.segment}</span></td>
+    return `<tr class="clk" tabindex="0" role="button" aria-label="Ouvrir l'historique de ${esc(v.modele)} ${esc(v.finition)}" onclick="openHistory('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHistory('${v.id}')}">
+      <td data-col="finition"><strong>${esc(v.modele)} ${esc(v.finition)}</strong><br><span style="color:var(--muted);font-size:11px">${esc(v.marque)} · ${esc(v.motor)}</span></td>
+      <td data-col="segment"><span class="chip chip-seg">${esc(v.segment)}</span></td>
       <td data-col="statut">${statutChip(st)}</td>
       <td data-col="showroom" class="num">${fmt(c.pvpTTC)}</td>
       <td data-col="remise" class="num">${fmtP(c.remise)}</td>
@@ -1588,7 +1601,7 @@ function fillHistFilters(){
   const sel=document.getElementById('histBrand'); if(!sel) return;
   const brands=[...new Set(VEHICLES.filter(v=>Object.keys(v.months).length>1).map(v=>v.marque))].sort();
   const prev=sel.value;
-  sel.innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${b}</option>`).join('');
+  sel.innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${esc(b)}</option>`).join('');
   sel.value=brands.includes(prev)?prev:'';
 }
 function renderHistory(){
@@ -1614,8 +1627,8 @@ function renderHistory(){
     const dShow=(ef&&el&&ef.pvpTTC)?((el.pvpTTC-ef.pvpTTC)/ef.pvpTTC):0;
     const dRem=(ef&&el)?(el.remise-ef.remise):0;
     const tg=(ef&&el)?tag(dCem,dShow,dRem):{t:'Historique insuffisant',c:'chip-muted'};
-    return `<tr class="clk" tabindex="0" role="button" aria-label="Dérouler l'historique de ${v.modele} ${v.finition}" onclick="toggleHistRow('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleHistRow('${v.id}')}">
-      <td><strong>${v.marque} ${v.modele} ${v.finition}</strong></td>
+    return `<tr class="clk" tabindex="0" role="button" aria-label="Dérouler l'historique de ${esc(v.modele)} ${esc(v.finition)}" onclick="toggleHistRow('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleHistRow('${v.id}')}">
+      <td><strong>${esc(v.marque)} ${esc(v.modele)} ${esc(v.finition)}</strong></td>
       <td class="num">${ef?fmt(ef.pvpTTC):'—'}</td><td class="num">${el?fmt(el.pvpTTC):'—'}</td>
       <td class="num">${ef?fmtP(ef.remise):'—'}</td><td class="num">${el?fmtP(el.remise):'—'}</td>
       <td class="num">${ef?fmt(ef.CEM):'—'}</td><td class="num">${el?fmt(el.CEM):'—'}</td>
@@ -1645,7 +1658,7 @@ function histDetailHTML(id){
     if(e.AA>e.AB) reads.push({n:'2',t:'Effet fiscal à surveiller',p:`La remise est majoritairement fiscale (${fmtP(e.AA)} vs ${fmtP(e.AB)} commerciale). Isoler l'effort réel avant toute réaction.`});
     else reads.push({n:'2',t:'Effort commercial réel',p:`La remise est surtout commerciale (${fmtP(e.AB)}). Soutien concessionnaire visible sur cette finition.`});
     reads.push({n:'3',t:'Action recommandée',p: e.AB>0.08? 'Surveiller de près les offres concurrentes directes ; niveau de remise agressif.' : 'Maintenir le suivi ; pas de réaction prix immédiate nécessaire.'});
-  } else { reads.push({n:'—',t:'Hors scope ce mois',p:v.comment||'Finition non disponible sur le mois courant.'}); }
+  } else { reads.push({n:'—',t:'Hors scope ce mois',p:esc(v.comment)||'Finition non disponible sur le mois courant.'}); }
   return `<div class="grid two-col" style="margin:6px 0 2px">
     <div>
       <div class="spark-legend"><span><i style="background:#efc900"></i>Prix CEM</span><span><i style="background:#111827"></i>Prix showroom TTC</span></div>
@@ -1710,8 +1723,8 @@ function renderCompare(){
     const tg=tag(dCem,dShow,dRem);
     const dc=(x)=>x>0.0005?'red':(x<-0.0005?'green':'');
     return `<tr>
-      <td><strong>${v.modele} ${v.finition}</strong></td>
-      <td><span class="chip chip-seg">${v.segment}</span></td>
+      <td><strong>${esc(v.modele)} ${esc(v.finition)}</strong></td>
+      <td><span class="chip chip-seg">${esc(v.segment)}</span></td>
       <td class="num" data-var="showroom">${fmt(p.pvpTTC)}</td><td class="num" data-var="showroom">${fmt(m.pvpTTC)}</td><td class="num ${dc(dShow)}" data-var="showroom">${dShow===0?'0 %':(dShow*100).toFixed(1)+' %'}</td>
       <td class="num" data-var="remise">${fmtP(p.remise)}</td><td class="num" data-var="remise">${fmtP(m.remise)}</td><td class="num ${dc(dRem)}" data-var="remise">${dRem===0?'0 pt':((dRem*100).toFixed(1))+' pt'}</td>
       <td class="num" data-var="cem">${fmt(p.CEM)}</td><td class="num" data-var="cem">${fmt(m.CEM)}</td><td class="num ${dc(dCem)}" data-var="cem">${dCem===0?'0 %':(dCem*100).toFixed(2)+' %'}</td>
@@ -1734,7 +1747,7 @@ function priceIndexRows(seg){
   const rows=[];
   scope(CURRENT).filter(v=>v.segment===seg).forEach(v=>{
     const e=vehMonth(v,CURRENT).e;
-    rows.push({name:`${v.marque} ${v.modele} ${v.finition}`, pub:e.pvpTTC, remise:e.remise, transac:e.Q, luxe:e.R, client:true});
+    rows.push({name:`${esc(v.marque)} ${esc(v.modele)} ${esc(v.finition)}`, pub:e.pvpTTC, remise:e.remise, transac:e.Q, luxe:e.R, client:true});
   });
   BENCH.filter(b=>b.seg===seg).forEach(b=>{
     if(b.na){ rows.push({name:`${b.marque} ${b.label}`, na:true}); return; }
@@ -1758,9 +1771,9 @@ function renderPriceIndex(){
       <div class="table-wrap"><table><thead><tr>
         <th>Version</th><th class="num">Prix public TTC</th><th class="num">Remise</th><th class="num">Prix transac. TTC</th><th class="num">Taxe luxe</th><th class="num">Indice prix</th><th class="num">Position</th><th class="num">Écart /1er</th>
       </tr></thead><tbody>${rows.map(r=>{
-        if(r.na) return `<tr><td>${r.name} <span class="chip chip-muted">données à venir</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">${r.pos}</td><td class="num">—</td></tr>`;
+        if(r.na) return `<tr><td>${esc(r.name)} <span class="chip chip-muted">données à venir</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">${r.pos}</td><td class="num">—</td></tr>`;
         return `<tr${r.client?' style="background:#fff8f1"':''}>
-          <td>${r.client?'<strong>'+r.name+'</strong> <span class="chip chip-ok">Auto Nejma</span>':r.name}</td>
+          <td>${r.client?'<strong>'+esc(r.name)+'</strong> <span class="chip chip-ok">Auto Nejma</span>':esc(r.name)}</td>
           <td class="num">${fmt(r.pub)}</td><td class="num">${fmtP(r.remise)}</td><td class="num">${fmt(r.transac)}</td>
           <td class="num">${r.luxe>0?fmtP(r.luxe,0):'—'}</td>
           <td class="num"><strong>${r.indice.toFixed(0)}</strong></td><td class="num">${r.pos}</td><td class="num">${r.ecart>0?'+'+fmt(r.ecart):'—'}</td>
@@ -1781,12 +1794,12 @@ function renderBenchmark(){
   const lecture=(rem)=> rem>0.09?{t:'Agressif',c:'chip-track'}:rem>0.07?{t:'Soutien ciblé',c:'chip-alert'}:rem>0.055?{t:'Offensif',c:'chip-ok'}:{t:'Premium défensif',c:'chip-muted'};
   document.getElementById('benchBody').innerHTML=Object.entries(agg).map(([b,o])=>{
     const rem=avg(o.rem); const lc=lecture(rem);
-    return `<tr><td><strong>${b}</strong></td><td class="num">${fmtK(avg(o.cem))}</td><td class="num">${fmtP(rem)}</td><td class="num">${o.ix.length?avg(o.ix).toFixed(0):'—'}</td><td><span class="chip ${lc.c}">${lc.t}</span></td></tr>`;
+    return `<tr><td><strong>${esc(b)}</strong></td><td class="num">${fmtK(avg(o.cem))}</td><td class="num">${fmtP(rem)}</td><td class="num">${o.ix.length?avg(o.ix).toFixed(0):'—'}</td><td><span class="chip ${lc.c}">${lc.t}</span></td></tr>`;
   }).join('');
   // matrix: price (indice segment vs 100) x remise commerciale (agressive > 7%)
   const q={hh:[],hl:[],lh:[],ll:[]};
   scope(CURRENT).forEach(v=>{ const e=vehMonth(v,CURRENT).e; const ix=indice(v,CURRENT); if(ix==null)return;
-    const hiPrice=ix>=100, hiRem=e.AB>=0.07; const key=(hiPrice?'h':'l')+(hiRem?'h':'l'); q[key].push(`${v.modele} ${v.finition}`); });
+    const hiPrice=ix>=100, hiRem=e.AB>=0.07; const key=(hiPrice?'h':'l')+(hiRem?'h':'l'); q[key].push(`${esc(v.modele)} ${esc(v.finition)}`); });
   const dots=arr=>arr.length?arr.map(x=>`<span class="brand-dot">${x}</span>`).join(''):'<span style="color:#94a3b8;font-size:12px">—</span>';
   document.getElementById('matrix').innerHTML=`
     <div class="quadrant"><h4>Prix élevé / Remise faible</h4>${dots(q.hl)}</div>
@@ -1799,7 +1812,7 @@ function renderBenchmark(){
 function renderCatalog(){
   document.getElementById('catalogBody').innerHTML=VEHICLES.map(v=>{
     const role=v.role==='catalog'?'<span class="chip chip-muted">Référence</span>':'<span class="chip chip-ok">Suivi client</span>';
-    return `<tr><td>${v.marque}</td><td>${v.modele}</td><td>${v.motor}</td><td><strong>${v.finition}</strong></td><td>${v.segment}</td><td>${v.type}</td><td>${role}</td></tr>`;
+    return `<tr><td>${esc(v.marque)}</td><td>${esc(v.modele)}</td><td>${esc(v.motor)}</td><td><strong>${esc(v.finition)}</strong></td><td>${esc(v.segment)}</td><td>${v.type}</td><td>${role}</td></tr>`;
   }).join('');
 }
 function renderQuality(){
@@ -1808,12 +1821,12 @@ function renderQuality(){
     const c=vehMonth(v,CURRENT); const e=c.e;
     // check CEM observed vs computed
     if(c.cemObs!=null){ const diff=Math.abs(e.CEM-c.cemObs); const ok=diff<1500;
-      out.push({f:`${v.modele} ${v.finition}`,ctrl:'Cohérence CEM calculé vs observé',st:ok?'Validé':'À vérifier',cls:ok?'chip-ok':'chip-alert',d:`Calculé ${fmt(e.CEM)} vs observé ${fmt(c.cemObs)} (écart ${fmt(diff)}).`}); }
+      out.push({f:`${esc(v.modele)} ${esc(v.finition)}`,ctrl:'Cohérence CEM calculé vs observé',st:ok?'Validé':'À vérifier',cls:ok?'chip-ok':'chip-alert',d:`Calculé ${fmt(e.CEM)} vs observé ${fmt(c.cemObs)} (écart ${fmt(diff)}).`}); }
     // palier proximity
     const near=[400000,600000,800000,1000000].some(s=>e.P>=s*0.97&&e.P<=s*1.03);
-    out.push({f:`${v.modele} ${v.finition}`,ctrl:'Palier taxe de luxe',st:near?'Alerte':'OK',cls:near?'chip-track':'chip-ok',d:near?`Prix remisé HT ${fmt(e.P)} proche d'un seuil.`:`Marge suffisante au palier (${fmtP(e.R,0)}).`});
+    out.push({f:`${esc(v.modele)} ${esc(v.finition)}`,ctrl:'Palier taxe de luxe',st:near?'Alerte':'OK',cls:near?'chip-track':'chip-ok',d:near?`Prix remisé HT ${fmt(e.P)} proche d'un seuil.`:`Marge suffisante au palier (${fmtP(e.R,0)}).`});
     // remise level
-    out.push({f:`${v.modele} ${v.finition}`,ctrl:'Niveau remise commerciale',st:e.AB>0.08?'Alerte':'Validé',cls:e.AB>0.08?'chip-alert':'chip-ok',d:`Remise commerciale réelle ${fmtP(e.AB)}.`});
+    out.push({f:`${esc(v.modele)} ${esc(v.finition)}`,ctrl:'Niveau remise commerciale',st:e.AB>0.08?'Alerte':'Validé',cls:e.AB>0.08?'chip-alert':'chip-ok',d:`Remise commerciale réelle ${fmtP(e.AB)}.`});
   });
   document.getElementById('qualityBody').innerHTML=out.map(o=>`<tr><td>${o.f}</td><td>${o.ctrl}</td><td><span class="chip ${o.cls}">${o.st}</span></td><td>${o.d}</td></tr>`).join('');
 }
@@ -1851,7 +1864,7 @@ function renderEngineExample(){
   const el=document.getElementById('engineExample'); if(!el) return;
   if(!v){ el.innerHTML='<div class="empty-note">Aucune finition calculable ce mois.</div>'; return; }
   const e=vehMonth(v,CURRENT).e;
-  el.innerHTML=`<div class="row sub"><span>Finition</span><span>${v.marque} ${v.modele} ${v.finition}</span></div>`+breakdownHTML(e);
+  el.innerHTML=`<div class="row sub"><span>Finition</span><span>${esc(v.marque)} ${esc(v.modele)} ${esc(v.finition)}</span></div>`+breakdownHTML(e);
 }
 
 /* ================= COLLECTION (add observation) ================= */
@@ -1880,7 +1893,7 @@ function handleProofFile(file){
 }
 function fillUploadVehicles(){
   const sel=document.getElementById('ulVehicle'); if(!sel) return;
-  sel.innerHTML=VEHICLES.map(v=>`<option value="${v.id}">${v.marque} ${v.modele} ${v.finition}</option>`).join('');
+  sel.innerHTML=VEHICLES.map(v=>`<option value="${v.id}">${esc(v.marque)} ${esc(v.modele)} ${esc(v.finition)}</option>`).join('');
   const wrap=document.getElementById('ulVisWrap');
   const acc=currentAccount();
   if(wrap) wrap.style.display=(acc&&acc.role==='admin')?'':'none';
@@ -1957,7 +1970,7 @@ function exportCSV(){
   const rows=trackedFiltered().map(v=>{ const e=vehMonth(v,CURRENT).e; const ix=indice(v,CURRENT);
     return [v.marque,v.modele,v.motor,v.finition,v.segment,v.type,e.pvpTTC,Math.round(e.K),(e.remise*100).toFixed(2),Math.round(e.remiseHT),Math.round(e.P),Math.round(e.Q),(e.R*100).toFixed(0),Math.round(e.S),e.fi,Math.round(e.CEM),e.Wmin==null?'':Math.round(e.Wmin),e.Xpalier==null?'':Math.round(e.Xpalier),Math.round(e.Y),Math.round(e.Z),(e.AA*100).toFixed(2),(e.AB*100).toFixed(2),ix?ix.toFixed(1):'',lectureRemise(e)];
   });
-  const csv=[H,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const csv=[H,...rows].map(r=>r.map(csvCell).join(';')).join('\n');
   download(`AutoNejma_Analyse_${(MLABEL[CURRENT]||CURRENT).replace(/\s/g,'')}.csv`,csv); showToast('Fichier maître Excel (CSV) téléchargé — vue filtrée');
 }
 function exportCompareCSV(){
@@ -1974,7 +1987,7 @@ function exportCompareCSV(){
     const m=vehMonth(v,b).e,p=vehMonth(v,a).e; const dShow=(m.pvpTTC-p.pvpTTC)/p.pvpTTC,dRem=m.remise-p.remise,dCem=(m.CEM-p.CEM)/p.CEM;
     return [`${v.modele} ${v.finition}`,v.segment,p.pvpTTC,m.pvpTTC,(dShow*100).toFixed(1),(p.remise*100).toFixed(1),(m.remise*100).toFixed(1),(dRem*100).toFixed(1),Math.round(p.CEM),Math.round(m.CEM),(dCem*100).toFixed(2),tag(dCem,dShow,dRem).t];
   });
-  const csv=[H,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const csv=[H,...rows].map(r=>r.map(csvCell).join(';')).join('\n');
   download(`AutoNejma_Comparatif_${(MLABEL[a]||a).replace(/\s/g,'')}_vs_${(MLABEL[b]||b).replace(/\s/g,'')}.csv`,csv); showToast('Comparatif téléchargé — vue filtrée');
 }
 
@@ -2507,7 +2520,7 @@ async function handleFile(file){
       if(!recs.length){status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Aucune ligne exploitable. Vérifiez les colonnes (Marque, Modèle, Prix Showroom TTC, Prix remisé TTC CEM).</div>';return;}
       PENDING_UPLOAD=recs;
       status.innerHTML=`<div class="empty-note" style="text-align:left"><strong>${recs.length} finition(s)</strong> détectée(s) et prêtes à publier.</div>${MONTH_MISMATCH_NOTICE?`<div class="empty-note" style="text-align:left;color:var(--focus);margin-top:6px">⚠ ${MONTH_MISMATCH_NOTICE}</div>`:''}`;
-      document.getElementById('uploadPreview').innerHTML=`<div class="table-wrap" style="margin-top:12px;max-height:280px"><table><thead><tr><th>Marque</th><th>Modèle</th><th>Finition</th><th>Segment</th><th class="num">Showroom</th><th class="num">CEM</th><th class="num">Remise calc.</th></tr></thead><tbody>${recs.map(r=>{const rem=solveRemiseFromCEM(r.showroom,0,r.fi,r.type,r.cemObs);return `<tr><td>${r.marque}</td><td>${r.modele}</td><td>${r.finition}</td><td>${r.segment}</td><td class="num">${fmt(r.showroom)}</td><td class="num">${fmt(r.cemObs)}</td><td class="num">${fmtP(rem)}</td></tr>`;}).join('')}</tbody></table></div>
+      document.getElementById('uploadPreview').innerHTML=`<div class="table-wrap" style="margin-top:12px;max-height:280px"><table><thead><tr><th>Marque</th><th>Modèle</th><th>Finition</th><th>Segment</th><th class="num">Showroom</th><th class="num">CEM</th><th class="num">Remise calc.</th></tr></thead><tbody>${recs.map(r=>{const rem=solveRemiseFromCEM(r.showroom,0,r.fi,r.type,r.cemObs);return `<tr><td>${esc(r.marque)}</td><td>${esc(r.modele)}</td><td>${esc(r.finition)}</td><td>${esc(r.segment)}</td><td class="num">${fmt(r.showroom)}</td><td class="num">${fmt(r.cemObs)}</td><td class="num">${fmtP(rem)}</td></tr>`;}).join('')}</tbody></table></div>
         <button class="btn btn-primary" style="margin-top:14px" onclick="publishUpload()">✓ Importer les données</button>`;
     }catch(err){status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Erreur de lecture : '+err.message+'</div>';}
   };
@@ -2614,7 +2627,7 @@ function renderSelection(){
   const q=(document.getElementById('selSearch').value||'').toLowerCase();
   const fb=document.getElementById('selBrand').value;
   const brands=[...new Set(VEHICLES.map(v=>v.marque))];
-  document.getElementById('selBrand').innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${b}</option>`).join('');
+  document.getElementById('selBrand').innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${esc(b)}</option>`).join('');
   document.getElementById('selBrand').value=fb;
   const list=VEHICLES.filter(v=>{
     const s=`${v.marque} ${v.modele} ${v.finition} ${v.segment}`.toLowerCase();
@@ -2623,7 +2636,7 @@ function renderSelection(){
   el.innerHTML=list.map(v=>{
     const checked=picked.includes(v.id)?'checked':'';
     const already=v.months[CURRENT]?'<span class="chip chip-ok">Déjà suivi</span>':'<span class="chip chip-new">Nouveau</span>';
-    return `<tr><td><input type="checkbox" class="selChk" data-id="${v.id}" ${checked} ${submitted?'disabled':''} onchange="selCountUpdate()"></td><td>${v.marque}</td><td>${v.modele}</td><td>${v.finition}</td><td><span class="chip chip-seg">${v.segment}</span></td><td>${already}</td></tr>`;
+    return `<tr><td><input type="checkbox" class="selChk" data-id="${v.id}" ${checked} ${submitted?'disabled':''} onchange="selCountUpdate()"></td><td>${esc(v.marque)}</td><td>${esc(v.modele)}</td><td>${esc(v.finition)}</td><td><span class="chip chip-seg">${esc(v.segment)}</span></td><td>${already}</td></tr>`;
   }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--muted)">Aucune finition</td></tr>';
   selCountUpdate();
 }
@@ -2773,7 +2786,7 @@ function renderVdash(){
   const maxB=Math.max(...Object.values(byBrand),1);
   document.getElementById('vdashBrand').innerHTML=Object.entries(byBrand).map(([b,n])=>{
     const w=Math.max(6,n/maxB*100);
-    return `<div class="bar-row"><label>${b}</label><div class="bar-bg"><div class="bar-fill" style="width:${w}%"></div></div><b>${n}</b></div>`;
+    return `<div class="bar-row"><label>${esc(b)}</label><div class="bar-bg"><div class="bar-fill" style="width:${w}%"></div></div><b>${n}</b></div>`;
   }).join('');
 }
 
@@ -2784,7 +2797,7 @@ function fillMasterFilters(){
   const brands=[...new Set(VEHICLES.map(v=>v.marque))].sort();
   const segs=[...new Set(VEHICLES.map(v=>v.segment))].sort();
   const pb=brandSel.value, ps=segSel.value;
-  brandSel.innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${b}</option>`).join('');
+  brandSel.innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${esc(b)}</option>`).join('');
   segSel.innerHTML='<option value="">Tous segments</option>'+segs.map(s=>`<option>${s}</option>`).join('');
   brandSel.value=brands.includes(pb)?pb:''; segSel.value=segs.includes(ps)?ps:'';
 }
@@ -2805,7 +2818,7 @@ function renderMaster(){
   });
   el.innerHTML=rows.map(v=>{
     const active=v.statutOverride!=='Arrêtée';
-    return `<tr><td>${v.marque}</td><td>${v.modele}</td><td>${v.finition}</td><td>${v.motor}</td><td><span class="chip chip-seg">${v.segment}</span></td><td>${v.role==='catalog'?'Référence':'Suivi client'}</td><td>${active?'<span class="chip chip-ok">Actif</span>':'<span class="chip chip-muted">Inactif</span>'}</td><td><button class="btn btn-light" onclick="toggleMasterActive('${v.id}')">${active?'Désactiver':'Réactiver'}</button></td></tr>`;
+    return `<tr><td>${esc(v.marque)}</td><td>${esc(v.modele)}</td><td>${esc(v.finition)}</td><td>${esc(v.motor)}</td><td><span class="chip chip-seg">${esc(v.segment)}</span></td><td>${v.role==='catalog'?'Référence':'Suivi client'}</td><td>${active?'<span class="chip chip-ok">Actif</span>':'<span class="chip chip-muted">Inactif</span>'}</td><td><button class="btn btn-light" onclick="toggleMasterActive('${v.id}')">${active?'Désactiver':'Réactiver'}</button></td></tr>`;
   }).join('')||'<tr><td colspan="8" class="empty-note">Aucun résultat pour ces filtres.</td></tr>';
 }
 async function addMasterVehicle(){
@@ -2851,7 +2864,7 @@ function renderControl(){
   el.innerHTML=list.map(v=>{
     const e=vehMonth(v,period).e; const prev=vehMonth(v,cmp);
     const ix=indice(v,period); const st=statut(v,period)==='—'?(v.statutOverride||'Suivi'):statut(v,period);
-    return `<tr><td><strong>${v.marque} ${v.modele}</strong><br><span style="color:var(--muted);font-size:11px">${v.finition}</span></td><td>${statutChip(st)}</td><td class="num">${fmt(v.catalogue)}</td><td class="num">${fmt(e.pvpTTC)}</td><td class="num">${fmt(e.K)}</td><td class="num">${fmtP(e.remise)}</td><td class="num">${fmt(Math.abs(e.remiseHT))}</td><td class="num">${fmt(e.P)}</td><td class="num">${(e.R*100).toFixed(0)}%</td><td class="num">${fmt(e.S)}</td><td class="num">${fmt(e.CEM)}</td><td class="num">${e.Wmin==null?'—':fmt(e.Wmin)}</td><td class="num">${e.Xpalier==null?'—':fmt(e.Xpalier)}</td><td class="num">${prev&&prev.e?fmt(prev.e.CEM):'—'}</td><td class="num">${fmt(e.Y)}</td><td class="num">${fmt(e.Z)}</td><td class="num">${ix?ix.toFixed(0):'—'}</td></tr>`;
+    return `<tr><td><strong>${esc(v.marque)} ${esc(v.modele)}</strong><br><span style="color:var(--muted);font-size:11px">${esc(v.finition)}</span></td><td>${statutChip(st)}</td><td class="num">${fmt(v.catalogue)}</td><td class="num">${fmt(e.pvpTTC)}</td><td class="num">${fmt(e.K)}</td><td class="num">${fmtP(e.remise)}</td><td class="num">${fmt(Math.abs(e.remiseHT))}</td><td class="num">${fmt(e.P)}</td><td class="num">${(e.R*100).toFixed(0)}%</td><td class="num">${fmt(e.S)}</td><td class="num">${fmt(e.CEM)}</td><td class="num">${e.Wmin==null?'—':fmt(e.Wmin)}</td><td class="num">${e.Xpalier==null?'—':fmt(e.Xpalier)}</td><td class="num">${prev&&prev.e?fmt(prev.e.CEM):'—'}</td><td class="num">${fmt(e.Y)}</td><td class="num">${fmt(e.Z)}</td><td class="num">${ix?ix.toFixed(0):'—'}</td></tr>`;
   }).join('')||'<tr><td colspan="17" style="text-align:center;color:var(--muted)">Aucune donnée — importez le fichier de '+(MLABEL[period]||period)+' avant le contrôle.</td></tr>';
 }
 function blockingAnomalies(period){
@@ -2897,7 +2910,7 @@ function renderCoherence(){
   bEl.innerHTML=anomalies.length?anomalies.map(r=>{
     const pct=(r.delta*100); const cls=r.delta<0?'chip-ok':'chip-alert';
     const note=COHERENCE_NOTES[r.v.id]||'';
-    return `<tr><td><strong>${r.v.marque} ${r.v.modele}</strong> ${r.v.finition}</td><td>Prix CEM</td><td class="num">${fmt(r.prev)}</td><td class="num">${fmt(r.cur)}</td><td class="num">${pct>=0?'+':''}${pct.toFixed(1)}%</td><td><span class="chip ${cls}">À justifier</span></td><td><input class="field" style="width:100%" value="${note}" onchange="setCoherenceNote('${r.v.id}',this.value)" placeholder="Commentaire..."></td></tr>`;
+    return `<tr><td><strong>${esc(r.v.marque)} ${esc(r.v.modele)}</strong> ${esc(r.v.finition)}</td><td>Prix CEM</td><td class="num">${fmt(r.prev)}</td><td class="num">${fmt(r.cur)}</td><td class="num">${pct>=0?'+':''}${pct.toFixed(1)}%</td><td><span class="chip ${cls}">À justifier</span></td><td><input class="field" style="width:100%" value="${esc(note)}" onchange="setCoherenceNote('${r.v.id}',this.value)" placeholder="Commentaire..."></td></tr>`;
   }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--muted)">Aucune variation anormale détectée</td></tr>';
 }
 
