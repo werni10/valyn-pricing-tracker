@@ -123,6 +123,13 @@
   .chip-dark{background:#111827;color:white}
   .chip-muted{background:#f1f5f9;color:#475569}
   .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .col-picker{position:relative;display:inline-block}
+  .col-picker-panel{position:absolute;top:100%;right:0;margin-top:6px;background:white;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-soft);padding:8px;min-width:230px;max-height:320px;overflow:auto;display:none;z-index:60}
+  .col-picker-panel.open{display:block}
+  .col-picker-panel label{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--ink)}
+  .col-picker-panel label:hover{background:var(--bg)}
+  .col-picker-panel label input:disabled{opacity:.5}
+  .col-picker-panel label.locked{color:var(--muted);cursor:default}
   .field{background:white;border:1px solid var(--line);border-radius:14px;padding:11px 12px;min-width:170px;outline:none;font-weight:700;color:#1f2937;font-family:inherit;font-size:13px}
   .field:focus{border-color:var(--orange)}
   .search{min-width:280px}
@@ -390,24 +397,52 @@
         </div>
         <div class="filters">
           <select class="field" id="trackedMonth" onchange="onMonthChange()"></select>
-          <input class="field search" id="trackedSearch" placeholder="Rechercher modèle, finition, segment..." oninput="renderTracked()">
           <select class="field" id="trackedBrand" onchange="renderTracked()"><option value="">Toutes marques</option></select>
           <select class="field" id="trackedSeg" onchange="renderTracked()"><option value="">Tous segments</option></select>
+          <select class="field" id="trackedStatut" onchange="renderTracked()">
+            <option value="">Tous statuts</option>
+            <option value="Alerte">Alerte</option>
+            <option value="Nouveau">Nouveau</option>
+            <option value="Suivi">Suivi</option>
+            <option value="À vérifier">À vérifier</option>
+            <option value="Hors scope">Hors scope</option>
+            <option value="Arrêtée">Arrêtée</option>
+          </select>
+          <select class="field" id="trackedRemise" onchange="renderTracked()">
+            <option value="">Toutes remises</option>
+            <option value="0.08">Remise ≥ 8 %</option>
+            <option value="0.15">Remise ≥ 15 %</option>
+          </select>
+          <select class="field" id="trackedIndice" onchange="renderTracked()">
+            <option value="">Indice : tous</option>
+            <option value="sous">Sous 100 (compétitif)</option>
+            <option value="sur">Au-dessus de 100 (premium)</option>
+          </select>
+          <select class="field" id="trackedLuxe" onchange="renderTracked()">
+            <option value="">Taxe luxe : tous</option>
+            <option value="oui">Avec taxe de luxe</option>
+            <option value="non">Sans taxe de luxe</option>
+          </select>
+          <input class="field search" id="trackedSearch" placeholder="Rechercher modèle, finition, segment..." oninput="renderTracked()">
+          <div class="col-picker">
+            <button class="btn btn-light" type="button" onclick="toggleColPicker(event)">☰ Colonnes</button>
+            <div class="col-picker-panel" id="colPickerPanel" onclick="event.stopPropagation()"></div>
+          </div>
         </div>
         <div class="table-wrap">
           <table id="trackedTable">
             <thead><tr>
-              <th>Finition <span class="info-dot" tabindex="0" data-tip="Identifiant unique : marque + modèle + motorisation + finition.">i</span></th>
-              <th>Segment</th>
-              <th>Statut</th>
-              <th class="num">Prix showroom TTC <span class="info-dot" tabindex="0" data-tip="Prix affiché showroom / brochure, toutes taxes comprises.">i</span></th>
-              <th class="num">Remise % <span class="info-dot" tabindex="0" data-tip="Remise totale sur prix HT (showroom → remisé).">i</span></th>
-              <th class="num">Remise comm. réelle <span class="info-dot" tabindex="0" data-tip="Part purement commerciale de la remise, hors optimisation de la taxe de luxe.">i</span></th>
-              <th class="num">Taxe luxe <span class="info-dot" tabindex="0" data-tip="Taxe proportionnelle marocaine appliquée au prix remisé HT (thermique).">i</span></th>
-              <th class="num">Prix CEM <span class="info-dot" tabindex="0" data-tip="Prix clé en main = remisé TTC + (frais immat + taxe luxe) × 1,2.">i</span></th>
-              <th class="num">Indice segment <span class="info-dot" tabindex="0" data-tip="CEM vs moyenne CEM du segment (100 = moyenne).">i</span></th>
-              <th>Lecture remise</th>
-              <th>Preuve</th>
+              <th data-col="finition">Finition <span class="info-dot" tabindex="0" data-tip="Identifiant unique : marque + modèle + motorisation + finition.">i</span></th>
+              <th data-col="segment">Segment</th>
+              <th data-col="statut">Statut</th>
+              <th data-col="showroom" class="num">Prix showroom TTC <span class="info-dot" tabindex="0" data-tip="Prix affiché showroom / brochure, toutes taxes comprises.">i</span></th>
+              <th data-col="remise" class="num">Remise % <span class="info-dot" tabindex="0" data-tip="Remise totale sur prix HT (showroom → remisé).">i</span></th>
+              <th data-col="remiseComm" class="num">Remise comm. réelle <span class="info-dot" tabindex="0" data-tip="Part purement commerciale de la remise, hors optimisation de la taxe de luxe.">i</span></th>
+              <th data-col="luxe" class="num">Taxe luxe <span class="info-dot" tabindex="0" data-tip="Taxe proportionnelle marocaine appliquée au prix remisé HT (thermique).">i</span></th>
+              <th data-col="cem" class="num">Prix CEM <span class="info-dot" tabindex="0" data-tip="Prix clé en main = remisé TTC + (frais immat + taxe luxe) × 1,2.">i</span></th>
+              <th data-col="indice" class="num">Indice segment <span class="info-dot" tabindex="0" data-tip="CEM vs moyenne CEM du segment (100 = moyenne).">i</span></th>
+              <th data-col="lecture">Lecture remise</th>
+              <th data-col="preuve">Preuve</th>
             </tr></thead>
             <tbody id="trackedBody"></tbody>
           </table>
@@ -1315,34 +1350,87 @@ function fillMonthSelector(){
   sel.innerHTML=opts.map(p=>`<option value="${p}">${MLABEL[p]||p}${p===CURRENT?' — actuel':''}</option>`).join('');
   sel.value=opts.includes(cur)?cur:(opts[0]||CURRENT);
 }
+// column order = priority order (most important first); 'finition' is the identity
+// column and can't be hidden. Visibility choice persists across sessions.
+const TRACKED_COLS=[
+  {key:'finition',label:'Finition',locked:true},
+  {key:'statut',label:'Statut'},
+  {key:'cem',label:'Prix CEM'},
+  {key:'remise',label:'Remise %'},
+  {key:'indice',label:'Indice segment'},
+  {key:'segment',label:'Segment'},
+  {key:'showroom',label:'Prix showroom TTC'},
+  {key:'remiseComm',label:'Remise comm. réelle'},
+  {key:'luxe',label:'Taxe luxe'},
+  {key:'lecture',label:'Lecture remise'},
+  {key:'preuve',label:'Preuve'}
+];
+let TRACKED_HIDDEN=new Set();
+function toggleColPicker(e){
+  e.stopPropagation();
+  const p=document.getElementById('colPickerPanel'); if(!p) return;
+  if(!p.classList.contains('open')) renderColPicker();
+  p.classList.toggle('open');
+}
+function renderColPicker(){
+  const panel=document.getElementById('colPickerPanel'); if(!panel) return;
+  panel.innerHTML=TRACKED_COLS.map(c=>`<label class="${c.locked?'locked':''}"><input type="checkbox" ${c.locked?'checked disabled':(TRACKED_HIDDEN.has(c.key)?'':'checked')} onchange="toggleTrackedCol('${c.key}',this.checked)">${c.label}${c.locked?' (toujours visible)':''}</label>`).join('');
+}
+function toggleTrackedCol(key,visible){
+  if(visible) TRACKED_HIDDEN.delete(key); else TRACKED_HIDDEN.add(key);
+  save(LS.trackedCols,[...TRACKED_HIDDEN]);
+  applyTrackedColVisibility();
+}
+function applyTrackedColVisibility(){
+  TRACKED_COLS.forEach(c=>{
+    const hidden=!c.locked&&TRACKED_HIDDEN.has(c.key);
+    document.querySelectorAll(`#trackedTable [data-col="${c.key}"]`).forEach(el=>el.style.display=hidden?'none':'');
+  });
+}
+document.addEventListener('click',()=>{const p=document.getElementById('colPickerPanel'); if(p) p.classList.remove('open');});
 function renderTracked(){
   fillMonthSelector();
   const M=viewMonth();
   document.getElementById('trkPeriod').innerText=MLABEL[M]||M;
   const q=(document.getElementById('trackedSearch').value||'').toLowerCase();
   const fb=document.getElementById('trackedBrand').value, fs=document.getElementById('trackedSeg').value;
+  const fst=document.getElementById('trackedStatut')?.value||'';
+  const frem=parseFloat(document.getElementById('trackedRemise')?.value||'');
+  const fix=document.getElementById('trackedIndice')?.value||'';
+  const flux=document.getElementById('trackedLuxe')?.value||'';
   const list=scope(M).filter(v=>{
     const s=`${v.marque} ${v.modele} ${v.finition} ${v.segment}`.toLowerCase();
-    return s.includes(q) && (!fb||v.marque===fb) && (!fs||v.segment===fs);
+    if(!s.includes(q)) return false;
+    if(fb&&v.marque!==fb) return false;
+    if(fs&&v.segment!==fs) return false;
+    const c=vehMonth(v,M).e, st=statut(v,M), ix=indice(v,M);
+    if(fst&&st!==fst) return false;
+    if(!isNaN(frem)&&c.remise<frem) return false;
+    if(fix==='sous'&&!(ix!=null&&ix<100)) return false;
+    if(fix==='sur'&&!(ix!=null&&ix>=100)) return false;
+    if(flux==='oui'&&!(c.S>0)) return false;
+    if(flux==='non'&&c.S>0) return false;
+    return true;
   });
   document.getElementById('trkCount').innerText=`${list.length} référence(s)`;
   document.getElementById('trackedBody').innerHTML=list.map(v=>{
     const c=vehMonth(v,M).e; const st=statut(v,M); const ix=indice(v,M);
     const ixCls = ix==null?'':(ix>100?'red':'green');
     return `<tr class="clk" tabindex="0" role="button" aria-label="Ouvrir l'historique de ${v.modele} ${v.finition}" onclick="openHistory('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHistory('${v.id}')}">
-      <td><strong>${v.modele} ${v.finition}</strong><br><span style="color:var(--muted);font-size:11px">${v.marque} · ${v.motor}</span></td>
-      <td><span class="chip chip-seg">${v.segment}</span></td>
-      <td>${statutChip(st)}</td>
-      <td class="num">${fmt(c.pvpTTC)}</td>
-      <td class="num">${fmtP(c.remise)}</td>
-      <td class="num">${fmtP(c.AB)}</td>
-      <td class="num">${c.S>0?fmt(c.S)+' ('+fmtP(c.R,0)+')':'—'}</td>
-      <td class="num"><strong>${fmt(c.CEM)}</strong></td>
-      <td class="num ${ixCls}">${ix==null?'—':ix.toFixed(0)}</td>
-      <td><span style="font-size:11.5px">${lectureRemise(c)}</span></td>
-      <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openProof('${v.id}')">Voir</button></td>
+      <td data-col="finition"><strong>${v.modele} ${v.finition}</strong><br><span style="color:var(--muted);font-size:11px">${v.marque} · ${v.motor}</span></td>
+      <td data-col="segment"><span class="chip chip-seg">${v.segment}</span></td>
+      <td data-col="statut">${statutChip(st)}</td>
+      <td data-col="showroom" class="num">${fmt(c.pvpTTC)}</td>
+      <td data-col="remise" class="num">${fmtP(c.remise)}</td>
+      <td data-col="remiseComm" class="num">${fmtP(c.AB)}</td>
+      <td data-col="luxe" class="num">${c.S>0?fmt(c.S)+' ('+fmtP(c.R,0)+')':'—'}</td>
+      <td data-col="cem" class="num"><strong>${fmt(c.CEM)}</strong></td>
+      <td data-col="indice" class="num ${ixCls}">${ix==null?'—':ix.toFixed(0)}</td>
+      <td data-col="lecture"><span style="font-size:11.5px">${lectureRemise(c)}</span></td>
+      <td data-col="preuve"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openProof('${v.id}')">Voir</button></td>
     </tr>`;
   }).join('');
+  applyTrackedColVisibility();
 }
 function lectureRemise(c){
   if(c.AA===0) return 'Purement commerciale';
@@ -1845,9 +1933,10 @@ const DEFAULT_ACCOUNTS=[
   {id:'an-pricing',name:'Pricing Manager',org:'Auto Nejma',role:'client',email:'pricing@autonejma.ma',active:true,rights:grant(['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','catalog','collection','quality','selection','contact','settings'])},
   {id:'an-mkt',name:'Marketing (lecture)',org:'Auto Nejma',role:'client',email:'marketing@autonejma.ma',active:true,rights:grant(['dashboard','tracked','reports','contact'])}
 ];
-const LS={acc:'valyn_accounts',sess:'valyn_session',br:'valyn_broadcasts',reads:'valyn_reads',upload:'valyn_upload',uploadMeta:'valyn_upload_meta',cycle:'valyn_cycle',sel:'valyn_selections',tickets:'valyn_tickets',cohnotes:'valyn_coh_notes',notif:'valyn_notifprefs_'};
+const LS={acc:'valyn_accounts',sess:'valyn_session',br:'valyn_broadcasts',reads:'valyn_reads',upload:'valyn_upload',uploadMeta:'valyn_upload_meta',cycle:'valyn_cycle',sel:'valyn_selections',tickets:'valyn_tickets',cohnotes:'valyn_coh_notes',notif:'valyn_notifprefs_',trackedCols:'valyn_tracked_hidden_cols'};
 function load(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+TRACKED_HIDDEN=new Set(load(LS.trackedCols,[]));
 
 /* ===== Store: dual-mode backend (Supabase live / localStorage demo) ===== */
 const CFG = window.VALYN_CONFIG || {};
