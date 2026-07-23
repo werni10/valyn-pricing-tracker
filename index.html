@@ -349,8 +349,6 @@
     </div>
 
     <div class="toolbar">
-      <button class="btn btn-primary" onclick="runAnalysis()">▶ Recalculer l'analyse</button>
-      <button class="btn btn-dark" onclick="openModal('proofModal')">Voir justificatif exemple</button>
       <div style="margin-left:auto;display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-light" onclick="exportCSV()">⇩ Export Excel (CSV)</button>
         <button class="btn btn-light" onclick="window.print()">⇩ Export PDF / impression</button>
@@ -1831,7 +1829,6 @@ function openModal(id){ document.getElementById(id).classList.add("open"); docum
 function closePanels(){ document.getElementById("historyPanel").classList.remove("open"); document.getElementById("notifPanel").classList.remove("open"); document.getElementById("profileMenu").classList.remove("open"); document.querySelectorAll(".modal").forEach(m=>m.classList.remove("open")); document.getElementById("overlay").classList.remove("open"); }
 function go(id){ closePanels(); const l=document.querySelector(`.nav-link[data-page="${id}"]`); if(l) l.click(); }
 function showToast(msg){ const t=document.getElementById("toast"); t.innerText=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2600); }
-function runAnalysis(){ renderAll(); showToast("Analyse recalculée : KPI, alertes, benchmark et exports à jour"); document.querySelectorAll(".kpi .value").forEach(k=>k.animate([{transform:"scale(1)"},{transform:"scale(1.06)"},{transform:"scale(1)"}],{duration:500})); }
 
 /* ================= AUTH / ACCOUNTS / RIGHTS ================= */
 const CLIENT_CAPS=['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','engine','catalog','collection','quality','selection','contact','settings'];
