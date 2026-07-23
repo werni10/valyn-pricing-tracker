@@ -480,14 +480,26 @@
         <div class="filters">
           <label class="fl" style="display:flex;align-items:center;gap:6px">Mois A <select class="field" id="cmpA" onchange="renderCompare()"></select></label>
           <label class="fl" style="display:flex;align-items:center;gap:6px">Mois B <select class="field" id="cmpB" onchange="renderCompare()"></select></label>
+          <select class="field" id="cmpBrand" onchange="renderCompare()"><option value="">Toutes marques</option></select>
+          <select class="field" id="cmpSeg" onchange="renderCompare()"><option value="">Tous segments</option></select>
+          <select class="field" id="cmpVar" onchange="renderCompare()">
+            <option value="">Toutes variables</option>
+            <option value="showroom">Prix showroom</option>
+            <option value="remise">Remise %</option>
+            <option value="cem">Prix CEM</option>
+          </select>
+          <input class="field search" id="cmpSearch" placeholder="Rechercher une finition..." oninput="renderCompare()">
         </div>
+      </div>
+      <div class="grid kpi-grid" id="cmpKPI" style="margin-top:17px"></div>
+      <div class="card" style="margin-top:17px">
         <div class="table-wrap">
           <table>
             <thead><tr>
               <th>Finition</th><th>Segment</th>
-              <th class="num" id="cmpThA1">Showroom A</th><th class="num" id="cmpThB1">Showroom B</th><th class="num">Δ Showroom</th>
-              <th class="num" id="cmpThA2">Remise A</th><th class="num" id="cmpThB2">Remise B</th><th class="num">Δ Remise</th>
-              <th class="num" id="cmpThA3">CEM A</th><th class="num" id="cmpThB3">CEM B</th><th class="num">Δ CEM</th>
+              <th class="num" data-var="showroom" id="cmpThA1">Showroom A</th><th class="num" data-var="showroom" id="cmpThB1">Showroom B</th><th class="num" data-var="showroom">Δ Showroom</th>
+              <th class="num" data-var="remise" id="cmpThA2">Remise A</th><th class="num" data-var="remise" id="cmpThB2">Remise B</th><th class="num" data-var="remise">Δ Remise</th>
+              <th class="num" data-var="cem" id="cmpThA3">CEM A</th><th class="num" data-var="cem" id="cmpThB3">CEM B</th><th class="num" data-var="cem">Δ CEM</th>
               <th>Tag</th>
             </tr></thead>
             <tbody id="compareBody"></tbody>
@@ -1335,6 +1347,15 @@ function fillCompareMonths(){
   a.innerHTML=optHTML; b.innerHTML=optHTML;
   a.value=opts.includes(pa)?pa:(opts.includes(PREV)?PREV:(opts[1]||opts[0]));
   b.value=opts.includes(pb)?pb:(opts.includes(CURRENT)?CURRENT:opts[0]);
+  const brandSel=document.getElementById('cmpBrand'), segSel=document.getElementById('cmpSeg');
+  if(brandSel&&segSel){
+    const brands=[...new Set(VEHICLES.map(v=>v.marque))].sort();
+    const segs=[...new Set(VEHICLES.map(v=>v.segment))].sort();
+    const pb2=brandSel.value, ps2=segSel.value;
+    brandSel.innerHTML='<option value="">Toutes marques</option>'+brands.map(x=>`<option>${x}</option>`).join('');
+    segSel.innerHTML='<option value="">Tous segments</option>'+segs.map(x=>`<option>${x}</option>`).join('');
+    brandSel.value=brands.includes(pb2)?pb2:''; segSel.value=segs.includes(ps2)?ps2:'';
+  }
 }
 function statutChip(s){
   const map={'Suivi':'chip-ok','Nouveau':'chip-new','Alerte':'chip-alert','Hors scope':'chip-muted','Arrêtée':'chip-muted','À vérifier':'chip-track'};
@@ -1610,7 +1631,35 @@ function renderCompare(){
   const cmpSub=document.getElementById('cmpSub'); if(cmpSub) cmpSub.innerText=`${al} vs ${bl} · évolution showroom, remise et CEM.`;
   ['cmpThA1','cmpThA2','cmpThA3'].forEach((id,i)=>{const el=document.getElementById(id); if(el) el.innerText=['Showroom','Remise','CEM'][i]+' '+al;});
   ['cmpThB1','cmpThB2','cmpThB3'].forEach((id,i)=>{const el=document.getElementById(id); if(el) el.innerText=['Showroom','Remise','CEM'][i]+' '+bl;});
-  const rows=VEHICLES.filter(v=>vehMonth(v,b)&&vehMonth(v,a)&&vehMonth(v,b).e&&vehMonth(v,a).e);
+
+  const fb=document.getElementById('cmpBrand')?.value||'', fs=document.getElementById('cmpSeg')?.value||'';
+  const q=(document.getElementById('cmpSearch')?.value||'').toLowerCase();
+  const applyFilters=v=>{
+    if(fb&&v.marque!==fb) return false;
+    if(fs&&v.segment!==fs) return false;
+    if(q&&!(`${v.marque} ${v.modele} ${v.finition}`.toLowerCase().includes(q))) return false;
+    return true;
+  };
+  const rows=VEHICLES.filter(v=>vehMonth(v,b)&&vehMonth(v,a)&&vehMonth(v,b).e&&vehMonth(v,a).e).filter(applyFilters);
+
+  // KPI summary row: average CEM/remise swing across common finitions, plus
+  // finitions that only exist in B (new) and alerts that weren't alerts in A (new).
+  let kpiHTML='';
+  if(rows.length){
+    const dCems=rows.map(v=>{const m=vehMonth(v,b).e,p=vehMonth(v,a).e; return (m.CEM-p.CEM)/p.CEM;});
+    const dRems=rows.map(v=>{const m=vehMonth(v,b).e,p=vehMonth(v,a).e; return m.remise-p.remise;});
+    const avgCem=dCems.reduce((x,y)=>x+y,0)/dCems.length;
+    const avgRem=dRems.reduce((x,y)=>x+y,0)/dRems.length;
+    const newFinitions=VEHICLES.filter(applyFilters).filter(v=>vehMonth(v,b)&&vehMonth(v,b).e&&!(vehMonth(v,a)&&vehMonth(v,a).e)).length;
+    const newAlerts=VEHICLES.filter(applyFilters).filter(v=>vehMonth(v,b)&&vehMonth(v,b).e&&statut(v,b)==='Alerte'&&statut(v,a)!=='Alerte').length;
+    kpiHTML=`
+      <div class="card kpi"><div class="label">Variation CEM moyenne</div><div class="value">${avgCem===0?'0 %':(avgCem>0?'+':'')+(avgCem*100).toFixed(1)+' %'}</div><div class="trend ${avgCem<0?'green':(avgCem>0?'red':'')}">${avgCem<0?'Plus compétitif':(avgCem>0?'Moins compétitif':'Stable')}</div></div>
+      <div class="card kpi"><div class="label">Variation remise</div><div class="value">${avgRem===0?'0 pt':(avgRem>0?'+':'')+(avgRem*100).toFixed(1)+' pt'}</div><div class="trend ${avgRem>0?'red':(avgRem<0?'green':'')}">${avgRem>0?'Pression promotionnelle':(avgRem<0?'Remise en retrait':'Stable')}</div></div>
+      <div class="card kpi"><div class="label">Nouvelles finitions</div><div class="value">${newFinitions}</div></div>
+      <div class="card kpi"><div class="label">Alertes nouvelles</div><div class="value">${newAlerts}</div></div>`;
+  }
+  document.getElementById('cmpKPI').innerHTML=kpiHTML;
+
   document.getElementById('compareBody').innerHTML=rows.map(v=>{
     const m=vehMonth(v,b).e, p=vehMonth(v,a).e;
     const dShow=(m.pvpTTC-p.pvpTTC)/p.pvpTTC, dRem=m.remise-p.remise, dCem=(m.CEM-p.CEM)/p.CEM;
@@ -1619,12 +1668,19 @@ function renderCompare(){
     return `<tr>
       <td><strong>${v.modele} ${v.finition}</strong></td>
       <td><span class="chip chip-seg">${v.segment}</span></td>
-      <td class="num">${fmt(p.pvpTTC)}</td><td class="num">${fmt(m.pvpTTC)}</td><td class="num ${dc(dShow)}">${dShow===0?'0 %':(dShow*100).toFixed(1)+' %'}</td>
-      <td class="num">${fmtP(p.remise)}</td><td class="num">${fmtP(m.remise)}</td><td class="num ${dc(dRem)}">${dRem===0?'0 pt':((dRem*100).toFixed(1))+' pt'}</td>
-      <td class="num">${fmt(p.CEM)}</td><td class="num">${fmt(m.CEM)}</td><td class="num ${dc(dCem)}">${dCem===0?'0 %':(dCem*100).toFixed(2)+' %'}</td>
+      <td class="num" data-var="showroom">${fmt(p.pvpTTC)}</td><td class="num" data-var="showroom">${fmt(m.pvpTTC)}</td><td class="num ${dc(dShow)}" data-var="showroom">${dShow===0?'0 %':(dShow*100).toFixed(1)+' %'}</td>
+      <td class="num" data-var="remise">${fmtP(p.remise)}</td><td class="num" data-var="remise">${fmtP(m.remise)}</td><td class="num ${dc(dRem)}" data-var="remise">${dRem===0?'0 pt':((dRem*100).toFixed(1))+' pt'}</td>
+      <td class="num" data-var="cem">${fmt(p.CEM)}</td><td class="num" data-var="cem">${fmt(m.CEM)}</td><td class="num ${dc(dCem)}" data-var="cem">${dCem===0?'0 %':(dCem*100).toFixed(2)+' %'}</td>
       <td><span class="chip ${tg.c}">${tg.t}</span></td>
     </tr>`;
-  }).join('')||'<tr><td colspan="12" class="empty-note">Aucune finition commune aux deux mois sélectionnés.</td></tr>';
+  }).join('')||'<tr><td colspan="12" class="empty-note">Aucune finition commune aux deux mois sélectionnés (avec ces filtres).</td></tr>';
+
+  const selectedVar=document.getElementById('cmpVar')?.value||'';
+  ['showroom','remise','cem'].forEach(key=>{
+    const hidden=selectedVar&&selectedVar!==key;
+    document.querySelectorAll(`#compare [data-var="${key}"]`).forEach(el=>el.style.display=hidden?'none':'');
+  });
+
   document.getElementById('compareNotes').innerHTML=`<div class="empty-note" style="text-align:left"><strong>Lecture :</strong> le comparatif isole les 3 leviers du prix net (showroom, remise, CEM). Un CEM qui bouge sans variation showroom/remise signale un effet <em>palier fiscal</em> (changement de taux de taxe de luxe).</div>`;
 }
 
@@ -1863,8 +1919,14 @@ function exportCSV(){
 function exportCompareCSV(){
   const a=document.getElementById('cmpA')?.value||PREV, b=document.getElementById('cmpB')?.value||CURRENT;
   const H=[`Finition`,`Segment`,`Showroom ${MLABEL[a]||a}`,`Showroom ${MLABEL[b]||b}`,'Delta Showroom %',`Remise ${MLABEL[a]||a} %`,`Remise ${MLABEL[b]||b} %`,'Delta Remise pt',`CEM ${MLABEL[a]||a}`,`CEM ${MLABEL[b]||b}`,'Delta CEM %','Tag'];
-  const filteredIds=new Set(trackedFiltered().map(v=>v.id));
-  const rows=VEHICLES.filter(v=>filteredIds.has(v.id)&&vehMonth(v,b)&&vehMonth(v,a)&&vehMonth(v,b).e&&vehMonth(v,a).e).map(v=>{
+  const fb=document.getElementById('cmpBrand')?.value||'', fs=document.getElementById('cmpSeg')?.value||'';
+  const q=(document.getElementById('cmpSearch')?.value||'').toLowerCase();
+  const rows=VEHICLES.filter(v=>{
+    if(fb&&v.marque!==fb) return false;
+    if(fs&&v.segment!==fs) return false;
+    if(q&&!(`${v.marque} ${v.modele} ${v.finition}`.toLowerCase().includes(q))) return false;
+    return vehMonth(v,b)&&vehMonth(v,a)&&vehMonth(v,b).e&&vehMonth(v,a).e;
+  }).map(v=>{
     const m=vehMonth(v,b).e,p=vehMonth(v,a).e; const dShow=(m.pvpTTC-p.pvpTTC)/p.pvpTTC,dRem=m.remise-p.remise,dCem=(m.CEM-p.CEM)/p.CEM;
     return [`${v.modele} ${v.finition}`,v.segment,p.pvpTTC,m.pvpTTC,(dShow*100).toFixed(1),(p.remise*100).toFixed(1),(m.remise*100).toFixed(1),(dRem*100).toFixed(1),Math.round(p.CEM),Math.round(m.CEM),(dCem*100).toFixed(2),tag(dCem,dShow,dRem).t];
   });
