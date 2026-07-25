@@ -1016,6 +1016,10 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
     <div><h3>Ajouter une version</h3><p style="margin:6px 0 0;color:var(--muted)">Positionnement d'une version Auto Nejma ou d'un concurrent dans un segment.</p></div>
     <button class="close" onclick="closePanels()">×</button>
   </div>
+  <label class="fl">Voiture existante (optionnel)</label>
+  <input class="field" style="width:100%;margin-bottom:4px" id="avExisting" list="avExistingList" placeholder="Tapez pour rechercher…" oninput="pickExistingVersion()">
+  <datalist id="avExistingList"></datalist>
+  <p style="margin:0 0 10px;color:var(--muted);font-size:12.5px">Sélectionnez une fiche existante pour la modifier (nouveau segment, nouveau prix) au lieu d'en créer une en double.</p>
   <label class="fl">Segment</label>
   <input class="field" style="width:100%;margin-bottom:10px" id="avSeg" list="avSegList" placeholder="Compactes Hatchback">
   <datalist id="avSegList"></datalist>
@@ -3215,11 +3219,31 @@ async function addMasterVehicle(){
 function openAddVersion(seg){
   const segs=[...new Set([...VEHICLES.map(v=>v.segment), ...BENCH.map(b=>b.seg)])].sort();
   document.getElementById('avSegList').innerHTML=segs.map(s=>`<option value="${esc(s)}">`).join('');
+  document.getElementById('avExistingList').innerHTML=VEHICLES.map(v=>`<option value="${esc(v.marque+' '+v.modele+' '+v.finition)}">`).join('');
+  document.getElementById('avExisting').value='';
   document.getElementById('avSeg').value=seg||'';
   ['avMarque','avModele','avFinition','avPub','avRemise'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('avFi').value=FI_DEFAULT;
   document.getElementById('avType').value='Thermique';
   openModal('addVersionModal');
+}
+// Datalist pick (or exact retype) of an already-tracked car: pre-fill every
+// field with its current values so submitAddVersion()'s existing-vehicle
+// match updates it in place instead of creating a near-duplicate.
+function pickExistingVersion(){
+  const q=norm(document.getElementById('avExisting').value);
+  if(!q)return;
+  const v=VEHICLES.find(x=>norm(x.marque+' '+x.modele+' '+x.finition)===q);
+  if(!v)return;
+  document.getElementById('avSeg').value=v.segment;
+  document.getElementById('avMarque').value=v.marque;
+  document.getElementById('avModele').value=v.modele;
+  document.getElementById('avFinition').value=v.finition;
+  document.getElementById('avFi').value=v.fi;
+  document.getElementById('avType').value=v.type;
+  const cur=vehMonth(v,CURRENT);
+  document.getElementById('avPub').value=cur?cur.showroom:(v.catalogue||'');
+  document.getElementById('avRemise').value=cur&&cur.remise!=null?(cur.remise*100).toFixed(1):'';
 }
 async function submitAddVersion(){
   const segment=cleanText(document.getElementById('avSeg').value);
