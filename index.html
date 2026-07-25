@@ -548,7 +548,7 @@
         <div class="export-card"><div><h4>Fichier maître Excel (CSV)</h4><p>Base complète calculée : prix, remises, taxe luxe, CEM, indices, lecture.</p></div><button class="btn btn-primary" onclick="exportCSV()">Télécharger</button></div>
         <div class="export-card"><div><h4>Rapport PDF / impression</h4><p>Synthèse direction imprimable : KPI, alertes, benchmark, comparatif.</p></div><button class="btn btn-primary" onclick="window.print()">Générer</button></div>
         <div class="export-card"><div><h4>Analyse comparative (CSV)</h4><p>Évolutions showroom, remise et CEM avec tags de lecture.</p></div><button class="btn btn-light" onclick="exportCompareCSV()">Télécharger</button></div>
-        <div class="export-card"><div><h4>Annexe justificatifs</h4><p>Brochures, proformas, photos et supports commerciaux collectés.</p></div><button class="btn btn-light" onclick="openModal('proofModal')">Consulter</button></div>
+        <div class="export-card"><div><h4>Annexe justificatifs</h4><p>Brochures, proformas, photos et supports commerciaux collectés.</p></div><button class="btn btn-light" onclick="go('collection')">Consulter</button></div>
       </div>
     </section>
 
@@ -1067,14 +1067,19 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
 <!-- PROOF MODAL -->
 <div class="modal" id="proofModal">
   <div class="panel-head">
-    <div><h3>Justificatif transactionnel</h3><p style="margin:6px 0 0;color:var(--muted)">Prévisualisation : brochure, proforma, photo showroom.</p></div>
+    <div><h3 id="proofModalTitle">Justificatif</h3><p style="margin:6px 0 0;color:var(--muted)">Prévisualisation et dépôt du document, sans quitter la plateforme.</p></div>
     <button class="close" onclick="closePanels()">×</button>
   </div>
-  <div style="border:1px solid var(--line);border-radius:20px;background:linear-gradient(135deg,rgba(239,201,0,.12),transparent),#f8fafc;height:230px;display:grid;place-items:center;color:#475569;font-weight:900;text-align:center;margin:16px 0">
-    Aperçu document justificatif<br/>Brochure / Proforma / Photo terrain
+  <div id="proofPreviewBody" style="margin:14px 0"></div>
+  <div style="border-top:1px solid var(--line);padding-top:14px">
+    <label class="fl">Déposer un document (remplace l'actuel s'il y en a un)</label>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px">
+      <input type="file" id="pmFile" style="display:none" accept=".pdf,.jpg,.jpeg,.png" onchange="uploadProofInModal(this.files[0])">
+      <button class="btn btn-light" onclick="document.getElementById('pmFile').click()">📎 Choisir un fichier</button>
+      <select class="field" id="pmVisibility" style="display:none"><option value="client">Visible client</option><option value="interne">Interne Valyn uniquement</option></select>
+      <span id="pmUploading" style="display:none;color:var(--muted);font-size:12.5px">Envoi en cours…</span>
+    </div>
   </div>
-  <p>Chaque prix publié doit être rattaché à une preuve horodatée : traçabilité, fiabilité et crédibilité du tracker mensuel.</p>
-  <button class="btn btn-primary" onclick="showToast('Ouverture document — à brancher au stockage')">Ouvrir le document</button>
 </div>
 
 <div class="toast" id="toast">Action réalisée</div>
@@ -2037,18 +2042,72 @@ function renderCollectionDocs(){
     return `<div class="doc">${typeLabel} · ${v?v.marque+' '+v.modele+' '+v.finition:'—'} — ${d.name} <button class="btn btn-ghost btn-sm" onclick="openProof('${d.vehicleId}','${d.type}')">Voir</button></div>`;
   }).join(''):'<div class="empty-note">Aucun document attaché pour le moment.</div>';
 }
+// In-app preview + upload for a vehicle's justificatif — replaces the old
+// window.open(url,'_blank') behavior, which sent the document outside the
+// platform. Same modal doubles as the uploader: pmFile always accepts a new
+// file, whether or not one already exists for this vehicle/type.
+const PROOF_TYPE_LABEL={catalogue:'Brochure tarifaire',proforma:'Proforma / devis',photo:'Photo showroom'};
+let PROOF_CONTEXT={vehicleId:null,type:'catalogue'};
 async function openProof(vehicleId,type){
+  PROOF_CONTEXT={vehicleId,type:type||'catalogue'};
+  const acc=currentAccount();
+  const visWrap=document.getElementById('pmVisibility');
+  if(visWrap) visWrap.style.display=(acc&&acc.role==='admin')?'':'none';
   const pool=visibleDocs();
-  const doc=type?pool.find(d=>d.vehicleId===vehicleId&&d.type===type):pool.find(d=>d.vehicleId===vehicleId);
-  if(!doc){ openModal('proofModal'); return; }
-  if(Store.LIVE){
-    const url=await Store.getProofUrl(doc.path);
-    if(url) window.open(url,'_blank'); else showToast('Document indisponible');
-  } else if(doc.url){
-    window.open(doc.url,'_blank');
-  } else {
-    openModal('proofModal');
+  const doc=pool.find(d=>d.vehicleId===vehicleId&&d.type===PROOF_CONTEXT.type);
+  await renderProofPreview(doc);
+  openModal('proofModal');
+}
+async function renderProofPreview(doc){
+  const v=VEHICLES.find(x=>x.id===PROOF_CONTEXT.vehicleId);
+  const typeLabel=PROOF_TYPE_LABEL[PROOF_CONTEXT.type]||PROOF_CONTEXT.type;
+  document.getElementById('proofModalTitle').innerText=(v?v.marque+' '+v.modele+' '+v.finition+' — ':'')+typeLabel;
+  const el=document.getElementById('proofPreviewBody');
+  if(!doc){
+    el.innerHTML='<div class="empty-note" style="text-align:left">Aucun document pour cette finition — déposez-en un ci-dessous.</div>';
+    return;
   }
+  let url=null;
+  if(Store.LIVE) url=await Store.getProofUrl(doc.path);
+  else if(doc.url) url=doc.url;
+  if(!url){
+    el.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Document indisponible.</div>';
+    return;
+  }
+  const isImage=/\.(jpg|jpeg|png)$/i.test(doc.name);
+  el.innerHTML=(isImage
+    ?`<img src="${esc(url)}" style="max-width:100%;border-radius:14px;border:1px solid var(--line);display:block">`
+    :`<iframe src="${esc(url)}" style="width:100%;height:420px;border:1px solid var(--line);border-radius:14px"></iframe>`)
+    +`<p style="margin-top:10px;font-size:12.5px;color:var(--muted)">${esc(doc.name)} — ${doc.visibility==='interne'?'Interne Valyn':'Visible client'}</p>`;
+}
+async function uploadProofInModal(file){
+  if(!file)return;
+  const {vehicleId,type}=PROOF_CONTEXT;
+  const acc=currentAccount();
+  const visWrap=document.getElementById('pmVisibility');
+  const visibility=(acc&&acc.role==='admin'&&visWrap)?visWrap.value:'client';
+  const org=CFG.org||'Auto Nejma';
+  const prefix=visibility==='interne'?`${org}/_interne`:`${org}`;
+  const path=`${prefix}/${vehicleId}/${type}-${Date.now()}-${file.name}`;
+  const doc={id:'doc'+Date.now(),vehicleId,period:CURRENT,type,path,name:file.name,visibility,createdAt:new Date().toISOString()};
+  const busy=document.getElementById('pmUploading'); if(busy)busy.style.display='';
+  if(Store.LIVE){
+    const ok=await Store.uploadProof(path,file);
+    if(!ok){ if(busy)busy.style.display='none'; showToast('Échec de l\'envoi — réessayez'); return; }
+    const saved=await Store.saveDocument(doc);
+    if(saved) doc.id=saved.id;
+  } else {
+    doc.url=URL.createObjectURL(file); // demo-only, lost on reload
+  }
+  if(busy)busy.style.display='none';
+  document.getElementById('pmFile').value='';
+  // replace any prior doc of the same vehicle+type rather than stacking duplicates
+  const i=DOCUMENTS.findIndex(d=>d.vehicleId===vehicleId&&d.type===type);
+  if(i>=0) DOCUMENTS.splice(i,1);
+  DOCUMENTS.unshift(doc);
+  showToast('Document attaché');
+  await renderProofPreview(doc);
+  renderCollectionDocs(); renderDocs();
 }
 
 /* ================= EXPORTS ================= */
