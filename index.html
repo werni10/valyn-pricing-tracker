@@ -516,7 +516,7 @@
     <!-- PRICE INDEX -->
     <section class="page" id="priceindex">
       <div class="card">
-        <div class="section-head"><div><h3>Price Index par segment</h3><p>Positionnement du prix transactionnel Auto Nejma vs concurrence directe. Indice 100 = référence la plus compétitive du segment.</p></div></div>
+        <div class="section-head"><div><h3>Price Index par segment</h3><p>Positionnement du prix transactionnel Auto Nejma vs concurrence directe. Indice 100 = référence la plus compétitive du segment.</p></div><button class="btn btn-primary" onclick="openAddVersion('')">+ Ajouter une version</button></div>
         <div id="priceIndexBody"></div>
       </div>
     </section>
@@ -986,6 +986,34 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
   <p id="hpComment" style="color:var(--muted);line-height:1.55"></p>
 </aside>
 
+<!-- ADD VERSION (Price Index) MODAL -->
+<div class="modal" id="addVersionModal">
+  <div class="panel-head">
+    <div><h3>Ajouter une version</h3><p style="margin:6px 0 0;color:var(--muted)">Positionnement d'une version Auto Nejma ou d'un concurrent dans un segment.</p></div>
+    <button class="close" onclick="closePanels()">×</button>
+  </div>
+  <label class="fl">Segment</label>
+  <input class="field" style="width:100%;margin-bottom:10px" id="avSeg" list="avSegList" placeholder="Compactes Hatchback">
+  <datalist id="avSegList"></datalist>
+  <label class="fl">Marque</label>
+  <input class="field" style="width:100%;margin-bottom:10px" id="avMarque" placeholder="AUDI">
+  <div class="grid two-even" style="gap:10px;margin-bottom:10px">
+    <div><label class="fl">Modèle</label><input class="field" style="width:100%" id="avModele" placeholder="Q5"></div>
+    <div><label class="fl">Finition</label><input class="field" style="width:100%" id="avFinition" placeholder="S-LINE"></div>
+  </div>
+  <div class="grid two-even" style="gap:10px;margin-bottom:10px">
+    <div><label class="fl">Prix public TTC</label><input class="field" style="width:100%" id="avPub" placeholder="500000"></div>
+    <div><label class="fl">Remise %</label><input class="field" style="width:100%" id="avRemise" placeholder="8"></div>
+  </div>
+  <div class="grid two-even" style="gap:10px;margin-bottom:10px">
+    <div><label class="fl">Frais immat.</label><input class="field" style="width:100%" id="avFi" value="7105"></div>
+    <div><label class="fl">Type</label>
+      <select class="field" style="width:100%" id="avType"><option>Thermique</option><option>Électrique</option><option>Hybride rechargeable</option></select>
+    </div>
+  </div>
+  <button class="btn btn-primary" onclick="submitAddVersion()">+ Ajouter au Price Index</button>
+</div>
+
 <!-- PROOF MODAL -->
 <div class="modal" id="proofModal">
   <div class="panel-head">
@@ -1215,7 +1243,13 @@ function indice(v, m){
   return vm.e.CEM/avg*100;
 }
 // vehicles in scope for current month (has computable engine)
-function scope(m){ return VEHICLES.filter(v=>{const x=vehMonth(v,m); return x&&x.e;}); }
+// 'catalog' role = competitor/reference versions added on Price Index — they carry
+// real month data for the comparison, but must never leak into client-facing
+// analysis (dashboard, tracked table, alerts, control...). Those pages all read
+// through scope(), so the exclusion lives here, once.
+function scope(m){ return VEHICLES.filter(v=>{if(v.role==='catalog')return false; const x=vehMonth(v,m); return x&&x.e;}); }
+// Price Index needs both the client's own finitions AND catalog/competitor versions.
+function scopeWithCatalog(m){ return VEHICLES.filter(v=>{const x=vehMonth(v,m); return x&&x.e;}); }
 
 /* ================= FORMATTERS ================= */
 // HTML-escape free text before it goes into innerHTML/attribute contexts. Vehicle
@@ -1757,11 +1791,11 @@ function renderCompare(){
 
 /* ================= PRICE INDEX ================= */
 function priceIndexRows(seg){
-  // client finitions in segment (current month) + bench rows
+  // client finitions + catalog/competitor versions in segment (current month) + bench rows
   const rows=[];
-  scope(CURRENT).filter(v=>v.segment===seg).forEach(v=>{
+  scopeWithCatalog(CURRENT).filter(v=>v.segment===seg).forEach(v=>{
     const e=vehMonth(v,CURRENT).e;
-    rows.push({name:`${v.marque} ${v.modele} ${v.finition}`, pub:e.pvpTTC, remise:e.remise, transac:e.Q, luxe:e.R, client:true});
+    rows.push({name:`${v.marque} ${v.modele} ${v.finition}`, pub:e.pvpTTC, remise:e.remise, transac:e.Q, luxe:e.R, client:v.role!=='catalog', vehicleId:v.id});
   });
   BENCH.filter(b=>b.seg===seg).forEach(b=>{
     if(b.na){ rows.push({name:`${b.marque} ${b.label}`, na:true}); return; }
@@ -1776,12 +1810,12 @@ function priceIndexRows(seg){
   return rows;
 }
 function renderPriceIndex(){
-  const segs=[...new Set([...scope(CURRENT).map(v=>v.segment), ...BENCH.map(b=>b.seg)])];
+  const segs=[...new Set([...scopeWithCatalog(CURRENT).map(v=>v.segment), ...BENCH.map(b=>b.seg)])];
   document.getElementById('priceIndexBody').innerHTML=segs.map(seg=>{
     const rows=priceIndexRows(seg);
     if(!rows.length) return '';
     return `<div style="margin-bottom:22px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><h4 style="margin:0;font-size:15px">${seg}</h4><span class="chip chip-seg">${rows.length} versions</span></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><h4 style="margin:0;font-size:15px">${esc(seg)}</h4><span class="chip chip-seg">${rows.length} versions</span><button class="btn btn-light btn-sm" style="margin-left:auto" data-add-seg="${esc(seg)}" onclick="openAddVersion(this.dataset.addSeg)">+ Ajouter une version</button></div>
       <div class="table-wrap"><table><thead><tr>
         <th>Version</th><th class="num">Prix public TTC</th><th class="num">Remise</th><th class="num">Prix transac. TTC</th><th class="num">Taxe luxe</th><th class="num">Indice prix</th><th class="num">Position</th><th class="num">Écart /1er</th>
       </tr></thead><tbody>${rows.map(r=>{
@@ -2149,6 +2183,18 @@ const Store = {
       {org:this.org,marque:v.marque,modele:v.modele,motor:v.motor,finition:v.finition,segment:v.segment,type:v.type,fi:v.fi,catalogue:v.catalogue,vrole:v.role,comment:v.comment||'',status_override:v.statutOverride||null},
       {onConflict:'org,marque,modele,finition'}).select().single();
     return data;
+  },
+  // Price Index "+ Ajouter une version" — vehicle row (vrole:'catalog') + its one
+  // month of data, so it survives reload and shows for every user of the org.
+  async upsertCatalogVersion(v,period){
+    if(!this.sb)return null;
+    const {data:row}=await this.sb.from('vehicles').upsert(
+      {org:this.org,marque:v.marque,modele:v.modele,motor:v.motor||'',finition:v.finition,segment:v.segment,type:v.type,fi:v.fi,catalogue:v.catalogue,vrole:'catalog',comment:''},
+      {onConflict:'org,marque,modele,finition'}).select().single();
+    if(row){ const m=v.months[period]; await this.sb.from('monthly_data').upsert(
+      {vehicle_id:row.id,period:period+'-01',showroom:m.showroom,remise:m.remise},
+      {onConflict:'vehicle_id,period'}); }
+    return row;
   },
   async uploadProof(path,file){
     if(!this.sb)return false;
@@ -2877,6 +2923,35 @@ async function addMasterVehicle(){
   if(Store.LIVE) await Store.upsertVehicle(v);
   ['mMarque','mModele','mMotor','mFinition','mSegment','mCatalogue'].forEach(id=>document.getElementById(id).value='');
   showToast(marque+' '+modele+' '+finition+' ajoutée au référentiel');
+  fillSelectOnce(); renderAll();
+}
+function openAddVersion(seg){
+  const segs=[...new Set([...VEHICLES.map(v=>v.segment), ...BENCH.map(b=>b.seg)])].sort();
+  document.getElementById('avSegList').innerHTML=segs.map(s=>`<option value="${esc(s)}">`).join('');
+  document.getElementById('avSeg').value=seg||'';
+  ['avMarque','avModele','avFinition','avPub','avRemise'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('avFi').value=FI_DEFAULT;
+  document.getElementById('avType').value='Thermique';
+  openModal('addVersionModal');
+}
+async function submitAddVersion(){
+  const segment=cleanText(document.getElementById('avSeg').value);
+  const marque=cleanBrand(document.getElementById('avMarque').value);
+  const modele=cleanText(document.getElementById('avModele').value);
+  const finition=cleanText(document.getElementById('avFinition').value);
+  const pub=num(document.getElementById('avPub'));
+  const remisePct=num(document.getElementById('avRemise'));
+  const fi=num(document.getElementById('avFi'))||FI_DEFAULT;
+  const type=document.getElementById('avType').value;
+  if(!segment||!marque||!modele||!finition) return showToast('Renseignez au moins segment, marque, modèle et finition');
+  if(!pub) return showToast('Renseignez le prix public TTC');
+  const remise=remisePct/100;
+  let v=VEHICLES.find(x=>norm(x.marque)===norm(marque)&&norm(x.modele)===norm(modele)&&norm(x.finition)===norm(finition));
+  if(v){ v.segment=segment; v.type=type; v.fi=fi; v.months[CURRENT]={showroom:pub,remise}; }
+  else { v={id:'cat'+Date.now(),marque,modele,motor:'',finition,segment,type,fi,catalogue:pub,role:'catalog',comment:'',months:{[CURRENT]:{showroom:pub,remise}}}; VEHICLES.push(v); }
+  if(Store.LIVE) await Store.upsertCatalogVersion(v,CURRENT);
+  closePanels();
+  showToast(marque+' '+modele+' '+finition+' ajoutée au Price Index — '+segment);
   fillSelectOnce(); renderAll();
 }
 async function toggleMasterActive(id){
