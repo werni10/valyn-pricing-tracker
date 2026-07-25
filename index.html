@@ -878,6 +878,18 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
           <button class="btn btn-ghost" style="margin-top:12px;color:var(--red);border-color:#fca5a5" onclick="openPurgeConfirm()">🗑 Supprimer toutes les données</button>
         </div>
       </div>
+      <div class="card" style="margin-top:20px">
+        <div class="section-head"><div><h3>Import historique complet (déc. 25 → juin 26)</h3><p>À faire une seule fois : charge tout l'historique depuis le fichier maître (feuille "YTD Price Index Evolution"), marques client et concurrentes incluses. Un nouvel import écrase les mois qu'il couvre.</p></div></div>
+        <div class="upload-zone" id="historyDropZone">
+          <input type="file" id="historyFileInput" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="handleHistoryFile(this.files[0])">
+          <div style="font-size:34px">📚</div>
+          <strong style="display:block;margin:8px 0 4px">Déposer le fichier maître (.xlsm) ou cliquer</strong>
+          <span style="color:var(--muted);font-size:13px">Utilise "YTD Price Index Evolution" + "Ref Segment&FI" + "Input Data follow-up"</span>
+          <div style="margin-top:14px"><button class="btn btn-primary" onclick="document.getElementById('historyFileInput').click()">Choisir le fichier maître</button></div>
+        </div>
+        <div id="historyStatus" style="margin-top:14px"></div>
+        <div id="historyPreview"></div>
+      </div>
     </section>
 
     <!-- CONTROL (Valyn) -->
@@ -1309,7 +1321,7 @@ function renderKPI(){
   const cemSeries = MONTHS.map(m=>{ const s=scope(m); return s.length? s.reduce((a,v)=>a+vehMonth(v,m).e.CEM,0)/s.length : null; });
   const alerts = buildAlerts();
   const transmitted = transmittedPeriods().length;
-  const totalFinitions = VEHICLES.filter(v=>Object.keys(v.months).length).length;
+  const totalFinitions = VEHICLES.filter(v=>v.role!=='catalog'&&Object.keys(v.months).length).length;
   const wp = workingPeriod();
   const selCount = (SELECTIONS[wp]||[]).length;
   const wpRow = cycleRow(wp);
@@ -1659,7 +1671,7 @@ function breakdownHTML(e){
 /* ================= HISTORY PAGE ================= */
 function fillHistFilters(){
   const sel=document.getElementById('histBrand'); if(!sel) return;
-  const brands=[...new Set(VEHICLES.filter(v=>Object.keys(v.months).length>1).map(v=>v.marque))].sort();
+  const brands=[...new Set(VEHICLES.filter(v=>v.role!=='catalog'&&Object.keys(v.months).length>1).map(v=>v.marque))].sort();
   const prev=sel.value;
   sel.innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${esc(b)}</option>`).join('');
   sel.value=brands.includes(prev)?prev:'';
@@ -1675,7 +1687,7 @@ function renderHistory(){
   });
   const q=(document.getElementById('histSearch')?.value||'').toLowerCase();
   const brand=document.getElementById('histBrand')?.value||'';
-  const rows=VEHICLES.filter(v=>Object.keys(v.months).length>1).filter(v=>{
+  const rows=VEHICLES.filter(v=>v.role!=='catalog'&&Object.keys(v.months).length>1).filter(v=>{
     if(brand&&v.marque!==brand) return false;
     if(q&&!(`${v.marque} ${v.modele} ${v.finition}`.toLowerCase().includes(q))) return false;
     return true;
@@ -1752,6 +1764,7 @@ function renderCompare(){
   const fb=document.getElementById('cmpBrand')?.value||'', fs=document.getElementById('cmpSeg')?.value||'';
   const q=(document.getElementById('cmpSearch')?.value||'').toLowerCase();
   const applyFilters=v=>{
+    if(v.role==='catalog') return false;
     if(fb&&v.marque!==fb) return false;
     if(fs&&v.segment!==fs) return false;
     if(q&&!(`${v.marque} ${v.modele} ${v.finition}`.toLowerCase().includes(q))) return false;
@@ -2179,6 +2192,28 @@ const Store = {
         {onConflict:'vehicle_id,period'});
     }
   },
+  // One-time historical seed (Dec25→Jun26): one record per (vehicle, period).
+  // Caches the vehicle upsert per call since the same vehicle repeats across
+  // up to 7 periods — avoids re-upserting it 7x for one import run.
+  async bulkImportHistory(recs){
+    if(!this.sb)return;
+    const cache={};
+    for(const r of recs){
+      const key=r.marque+'|'+r.modele+'|'+r.finition;
+      let v=cache[key];
+      if(!v){
+        const {data,error}=await this.sb.from('vehicles').upsert(
+          {org:this.org,marque:r.marque,modele:r.modele,motor:r.motor,finition:r.finition,segment:r.segment,type:r.type,fi:r.fi,catalogue:r.showroom,vrole:r.role,comment:''},
+          {onConflict:'org,marque,modele,finition'}).select().single();
+        if(error)throw error;
+        v=data; cache[key]=v;
+      }
+      const {error:e2}=await this.sb.from('monthly_data').upsert(
+        {vehicle_id:v.id,period:r.period+'-01',showroom:r.showroom,cem_obs:r.cemObs},
+        {onConflict:'vehicle_id,period'});
+      if(e2)throw e2;
+    }
+  },
   async upsertMonth(period,status,extra){
     if(!this.sb)return null;
     const {data}=await this.sb.from('months').upsert({org:this.org,period:period+'-01',status,...extra},{onConflict:'org,period'}).select().single();
@@ -2582,6 +2617,123 @@ function buildKeyVersionMap(wb){
     map[norm(kv)]={segment:ixSeg>=0?String(r[ixSeg]||'').trim():'',fi:ixFi>=0?parseNum(r[ixFi]):null};}
   return map;
 }
+// "Input Data follow-up": Key_Version -> {marque,modele,motor,finition} decomposition,
+// used by the historical bulk import to break the Evolution sheet's single
+// "AUDI A3 Sportback 2.0 TDI EMOTION" string back into structured fields.
+function buildFollowUpMap(wb){
+  const sn=wb.SheetNames.find(n=>/input\s*data\s*follow.?up|suivi/i.test(n));
+  if(!sn)return null;
+  const aoa=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});
+  const hIdx=aoa.findIndex(r=>r.some(c=>norm(c)==='keyversion'));
+  if(hIdx<0)return null;
+  const headers=aoa[hIdx].map(String);
+  const ix={marque:pick(headers,['marque']),modele:pick(headers,['modele','modèle']),motor:pick(headers,['motorisation','moteur']),finition:pick(headers,['finition']),kv:pick(headers,['keyversion'])};
+  if(ix.kv<0)return null;
+  const map={};
+  for(let i=hIdx+1;i<aoa.length;i++){const r=aoa[i];const kv=r[ix.kv];if(!kv)continue;
+    map[norm(kv)]={marque:ix.marque>=0?r[ix.marque]:'',modele:ix.modele>=0?r[ix.modele]:'',motor:ix.motor>=0?r[ix.motor]:'',finition:ix.finition>=0?r[ix.finition]:''};}
+  return map;
+}
+// No source column anywhere in the workbook carries Type — infer it from the
+// name for brand-new vehicles only (applyHistoryImport never overwrites an
+// existing vehicle's type, same non-clobber rule as the monthly import).
+function guessImportedType(marque,fullName){
+  if(marque==='ZEEKR')return 'Électrique';
+  const s=String(fullName||'');
+  if(/\bkwh?\b/i.test(s))return 'Électrique';
+  if(/\bev\b/i.test(s))return 'Électrique';
+  if(/électrique|electrique/i.test(s))return 'Électrique';
+  if(/\b\d{2,3}\s?e\b/i.test(s))return 'Hybride rechargeable';
+  return 'Thermique';
+}
+// The "YTD Price Index Evolution" sheet holds two tables we need (Prix Public =
+// showroom, Prix remisés = observed CEM) as segment-grouped blocks: a title row,
+// a header row of month dates, then vehicle rows keyed by the same full name
+// string used as Key_Version elsewhere ("Remises" %, a third table in between,
+// is a derived commercial-effort metric — not needed, the app derives remise
+// itself from showroom+CEM+FI+type via solveRemiseFromCEM, same as the normal
+// monthly import already does).
+function parseEvolutionSheet(wb){
+  const sn=wb.SheetNames.find(n=>/price.*index.*evolution|evolution.*price.*index/i.test(n));
+  if(!sn)throw new Error('Feuille "YTD Price Index Evolution" introuvable dans ce fichier.');
+  const aoa=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});
+  const refMap=buildKeyVersionMap(wb)||{};
+  const fuMap=buildFollowUpMap(wb)||{};
+  const segSet=new Set(Object.values(refMap).map(r=>r.segment).filter(Boolean));
+
+  function findTable(titleRe){
+    const ti=aoa.findIndex(r=>r.some(c=>titleRe.test(String(c||'').trim())));
+    if(ti<0)return null;
+    let hi=-1;
+    for(let i=ti+1;i<Math.min(ti+5,aoa.length);i++){ if(aoa[i].some(c=>c instanceof Date)){hi=i;break;} }
+    if(hi<0)return null;
+    // don't hardcode the name column index — some tools drop a fully-blank
+    // leading column A, shifting every column left by one, so locate it the
+    // same way the month columns are already located: by header content.
+    const nameColIdx=aoa[hi].findIndex(c=>/segment.*version/i.test(String(c||'').replace(/\s+/g,' ')));
+    if(nameColIdx<0)return null;
+    const cols=[];
+    aoa[hi].forEach((c,idx)=>{
+      if(!(c instanceof Date))return;
+      // Excel serial dates read back with sub-day drift (seen: 23:00:20 UTC for
+      // a nominal midnight-local date) — a naive getUTCMonth() can land one day
+      // either side of the intended month. Shift by 12h first so any drift well
+      // under a day can't cross a month boundary before reading the calendar month.
+      const safe=new Date(c.getTime()+12*3600*1000);
+      cols.push({idx,period:safe.getUTCFullYear()+'-'+String(safe.getUTCMonth()+1).padStart(2,'0')});
+    });
+    const rows=[];
+    for(let i=hi+1;i<aoa.length;i++){
+      const r=aoa[i]; if(!r||!r.length)continue;
+      const name=cleanText(r[nameColIdx]||'');
+      if(!name)continue;
+      if(segSet.has(name))continue;                    // section header (e.g. "Compactes Hatchback")
+      if(/^(prix|remises?)\b/i.test(name))break;        // hit the next table's title — stop
+      const values={};
+      cols.forEach(({idx,period})=>{ const n=parseNum(r[idx]); if(n)values[period]=n; });
+      rows.push({name,values});
+    }
+    return rows;
+  }
+
+  const pubRows=findTable(/^prix public$/i);
+  const cemRows=findTable(/^prix remis[ée]s?$/i);
+  if(!pubRows)throw new Error('Table "Prix Public" introuvable dans la feuille Evolution.');
+  if(!cemRows)throw new Error('Table "Prix remisés" introuvable dans la feuille Evolution.');
+  const cemByName={}; cemRows.forEach(r=>cemByName[r.name]=r.values);
+
+  const out=[];
+  pubRows.forEach(pr=>{
+    const cem=cemByName[pr.name]||{};
+    const kv=norm(pr.name);
+    const ref=refMap[kv], fu=fuMap[kv];
+    if(!ref||!fu){ out.push({name:pr.name,skipped:true}); return; }
+    const periods={};
+    Object.keys(pr.values).forEach(period=>{
+      const show=pr.values[period], c=cem[period];
+      if(!show||!c)return;                              // need both a real showroom AND CEM for that month
+      periods[period]={showroom:show,cemObs:c};
+    });
+    if(!Object.keys(periods).length)return;              // tracked version, but no usable price point anywhere
+    const marque=cleanBrand(fu.marque);
+    out.push({name:pr.name,marque,modele:cleanText(fu.modele),motor:cleanText(fu.motor),finition:cleanText(fu.finition),
+      segment:ref.segment||'Divers',fi:ref.fi??FI_DEFAULT,role:marque==='AUDI'?'client':'catalog',periods});
+  });
+  // Vehicle identity everywhere else in this app is (marque,modele,finition) —
+  // motor isn't part of the key. That's fine normally, but this sheet has real
+  // pairs sharing modele+finition text while differing only in motor (e.g. BMW
+  // X5 "PACK M" in both a 30d diesel and a 50e hybrid). Left alone, the second
+  // one silently overwrites the first's whole price history on import. Fold
+  // motor into finition only for the colliding entries, so both survive as
+  // distinct vehicles without changing the identity scheme everywhere else.
+  const byIdentity={};
+  out.forEach(v=>{ const k=norm(v.marque)+'|'+norm(v.modele)+'|'+norm(v.finition); (byIdentity[k]=byIdentity[k]||[]).push(v); });
+  Object.values(byIdentity).forEach(group=>{
+    if(group.length<2)return;
+    group.forEach(v=>{ v.finition=(v.finition+' — '+v.motor).trim(); });
+  });
+  return out;
+}
 let PENDING_UPLOAD=null;
 let MONTH_MISMATCH_NOTICE=null;
 let xlsxLoadPromise=null;
@@ -2661,7 +2813,7 @@ function applyUpload(recs,period){
       // don't stomp existing catalog values (EV/hybrid flags, custom FI) with fallback defaults.
       if(r.fiProvided)v.fi=r.fi;if(r.typeProvided)v.type=r.type;delete v.statutOverride;}
     else VEHICLES.push({id:'up'+Math.random().toString(36).slice(2,7),marque:r.marque,modele:r.modele,motor:r.motor||'—',finition:r.finition||'(import)',
-      segment:r.segment,type:r.type,fi:r.fi,catalogue:r.showroom,role:'client',statutOverride:'Nouveau',comment:r.comment||'Importé depuis fichier mensuel.',
+      segment:r.segment,type:r.type,fi:r.fi,catalogue:r.showroom,role:r.role||'client',statutOverride:'Nouveau',comment:r.comment||'Importé depuis fichier mensuel.',
       months:{[period]:{showroom:r.showroom,cemObs:r.cemObs}}});
   });
 }
@@ -2697,6 +2849,86 @@ async function publishUpload(){
   fillSelectOnce();renderAll();
   PENDING_UPLOAD=null;MONTH_MISMATCH_NOTICE=null;document.getElementById('uploadPreview').innerHTML='';document.getElementById('uploadStatus').innerHTML='<div class="empty-note" style="text-align:left;color:var(--green)">✓ '+n+' finition(s) importée(s) pour '+(MLABEL[period]||period)+'. Passez par <strong>Pilotage</strong> pour valider le contrôle et transmettre au client.</div>';
   showToast(n+' finition(s) importée(s) — direction Pilotage pour publier');
+  renderDataAdmin();
+}
+// One-time historical seed (Dec25→Jun26) from the xlsm's YTD Price Index
+// Evolution / Ref Segment&FI / Input Data follow-up sheets. Separate flow from
+// the routine single-month uploader above — different sheets, covers many
+// months and both client + competitor vehicles in one pass.
+let PENDING_HISTORY=null;
+function versionsToRecs(versions,period){
+  const recs=[];
+  versions.forEach(v=>{
+    const d=v.periods[period]; if(!d)return;
+    recs.push({marque:v.marque,modele:v.modele,motor:v.motor,finition:v.finition,segment:v.segment,
+      type:v.type,typeProvided:true,fi:v.fi,fiProvided:true,role:v.role,showroom:d.showroom,cemObs:d.cemObs,comment:''});
+  });
+  return recs;
+}
+async function handleHistoryFile(file){
+  if(!file)return;
+  const status=document.getElementById('historyStatus');
+  status.innerHTML='<div class="empty-note" style="text-align:left">Lecture du fichier…</div>';
+  try{ await ensureXLSX(); }
+  catch(e){ status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Librairie xlsx non chargée (hors ligne).</div>'; return; }
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'binary',cellDates:true});
+      const parsed=parseEvolutionSheet(wb);
+      const usable=parsed.filter(p=>!p.skipped);
+      const skipped=parsed.filter(p=>p.skipped);
+      if(!usable.length){ status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Aucune version exploitable trouvée dans la feuille Evolution.</div>'; return; }
+      usable.forEach(v=>{ v.type=guessImportedType(v.marque,v.name); });
+      PENDING_HISTORY=usable;
+      const periodSet=new Set(); usable.forEach(v=>Object.keys(v.periods).forEach(p=>periodSet.add(p)));
+      const periods=[...periodSet].sort();
+      const totalPoints=usable.reduce((a,v)=>a+Object.keys(v.periods).length,0);
+      status.innerHTML=`<div class="empty-note" style="text-align:left"><strong>${usable.length} version(s)</strong> sur <strong>${periods.length} mois</strong> (${periods.map(p=>MLABEL[p]||ensureLabel(p)).join(', ')}) — <strong>${totalPoints}</strong> points de données.${skipped.length?`<br><span style="color:var(--focus)">⚠ ${skipped.length} version(s) ignorée(s) (segment/FI ou décomposition marque introuvable) : ${skipped.map(s=>esc(s.name)).join(', ')}</span>`:''}</div>`;
+      document.getElementById('historyPreview').innerHTML=`<div class="table-wrap" style="margin-top:12px;max-height:280px"><table><thead><tr><th>Marque</th><th>Modèle</th><th>Finition</th><th>Rôle</th><th>Type</th><th class="num">Mois couverts</th></tr></thead><tbody>${usable.map(v=>`<tr><td>${esc(v.marque)}</td><td>${esc(v.modele)}</td><td>${esc(v.finition)}</td><td>${v.role==='client'?'Suivi client':'Référence'}</td><td>${esc(v.type)}</td><td class="num">${Object.keys(v.periods).length}</td></tr>`).join('')}</tbody></table></div>
+        <button class="btn btn-primary" style="margin-top:14px" onclick="publishHistoryImport()">✓ Importer l'historique complet</button>`;
+    }catch(err){ status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Erreur : '+err.message+'</div>'; }
+  };
+  reader.readAsBinaryString(file);
+}
+async function publishHistoryImport(){
+  if(!PENDING_HISTORY)return;
+  const versions=PENDING_HISTORY;
+  const status=document.getElementById('historyStatus');
+  const periodSet=new Set(); versions.forEach(v=>Object.keys(v.periods).forEach(p=>periodSet.add(p)));
+  const periods=[...periodSet].sort();
+  const org=CFG.org||'Auto Nejma';
+
+  periods.forEach((period,i)=>{
+    applyUpload(versionsToRecs(versions,period),period);
+    const st=i===periods.length-1?'PUBLISHED':'ARCHIVED';
+    let row=cycleRow(period);
+    if(!row){ row={period,org,status:st,submittedAt:null,publishedAt:st==='PUBLISHED'?new Date().toISOString():null}; CYCLE.push(row); }
+    else row.status=st;
+  });
+  saveCycle();
+
+  if(Store.LIVE){
+    status.innerHTML='<div class="empty-note" style="text-align:left">Import de l\'historique vers la base… (peut prendre une minute)</div>';
+    try{
+      const recs=[];
+      versions.forEach(v=>Object.keys(v.periods).forEach(period=>{ const d=v.periods[period];
+        recs.push({marque:v.marque,modele:v.modele,motor:v.motor,finition:v.finition,segment:v.segment,type:v.type,fi:v.fi,role:v.role,period,showroom:d.showroom,cemObs:d.cemObs}); }));
+      await Store.bulkImportHistory(recs);
+      for(const p of periods) await Store.upsertMonth(p,cycleRow(p).status,{});
+      const u=await Store.getUser(); await Store.hydrate(u.id);
+    }catch(e){ status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Erreur import : '+e.message+'</div>'; return; }
+  } else {
+    const ups=load(LS.upload,{})||{};
+    periods.forEach(period=>{ ups[period]=versionsToRecs(versions,period); });
+    save(LS.upload,ups);
+    save(LS.uploadMeta,{when:new Date().toLocaleString('fr-FR'),count:versions.length,period:periods[periods.length-1]});
+  }
+  PENDING_HISTORY=null;
+  document.getElementById('historyPreview').innerHTML='';
+  fillSelectOnce(); renderAll();
+  status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--green)">✓ Historique importé : '+versions.length+' version(s) sur '+periods.length+' mois ('+(MLABEL[periods[0]]||periods[0])+' → '+(MLABEL[periods[periods.length-1]]||periods[periods.length-1])+').</div>';
+  showToast('Import historique terminé — '+versions.length+' version(s)');
   renderDataAdmin();
 }
 function openPurgeConfirm(){
@@ -2767,10 +2999,11 @@ function renderSelection(){
   }
   const q=(document.getElementById('selSearch').value||'').toLowerCase();
   const fb=document.getElementById('selBrand').value;
-  const brands=[...new Set(VEHICLES.map(v=>v.marque))];
+  const brands=[...new Set(VEHICLES.filter(v=>v.role!=='catalog').map(v=>v.marque))];
   document.getElementById('selBrand').innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${esc(b)}</option>`).join('');
   document.getElementById('selBrand').value=fb;
   const list=VEHICLES.filter(v=>{
+    if(v.role==='catalog') return false;
     const s=`${v.marque} ${v.modele} ${v.finition} ${v.segment}`.toLowerCase();
     return s.includes(q)&&(!fb||v.marque===fb);
   });
