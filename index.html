@@ -875,7 +875,7 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
           <div class="empty-note" style="text-align:left;margin-top:8px;font-size:12.5px">
             <strong>Workflow Valyn :</strong> import fichier → contrôle qualité automatique → publication → le client reçoit une notification et le dashboard à jour. Un import remplace les données du mois courant pour les finitions correspondantes.
           </div>
-          <button class="btn btn-ghost" style="margin-top:12px" onclick="resetData()">↺ Réinitialiser aux données d'origine</button>
+          <button class="btn btn-ghost" style="margin-top:12px;color:var(--red);border-color:#fca5a5" onclick="openPurgeConfirm()">🗑 Supprimer toutes les données</button>
         </div>
       </div>
     </section>
@@ -985,6 +985,18 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
   <h4 style="margin-top:20px">Commentaire terrain</h4>
   <p id="hpComment" style="color:var(--muted);line-height:1.55"></p>
 </aside>
+
+<!-- PURGE CONFIRM MODAL -->
+<div class="modal" id="purgeModal">
+  <div class="panel-head">
+    <div><h3 style="color:var(--red)">Supprimer toutes les données</h3><p style="margin:6px 0 0;color:var(--muted)">Action irréversible.</p></div>
+    <button class="close" onclick="closePanels()">×</button>
+  </div>
+  <p>Ceci supprime <strong>définitivement</strong> tous les véhicules, données mensuelles, sélections et justificatifs de <strong id="purgeOrgName"></strong> — pour repartir sur un import propre. Les comptes utilisateurs et l'historique de diffusion ne sont pas touchés.</p>
+  <label class="fl">Tapez <strong>SUPPRIMER</strong> pour confirmer</label>
+  <input class="field" style="width:100%;margin-bottom:12px" id="purgeConfirmInput" placeholder="SUPPRIMER" oninput="document.getElementById('purgeConfirmBtn').disabled=this.value.trim()!=='SUPPRIMER'">
+  <button class="btn btn-primary" id="purgeConfirmBtn" disabled style="background:var(--red);color:#fff" onclick="confirmPurge()">🗑 Supprimer définitivement</button>
+</div>
 
 <!-- ADD VERSION (Price Index) MODAL -->
 <div class="modal" id="addVersionModal">
@@ -2196,6 +2208,14 @@ const Store = {
       {onConflict:'vehicle_id,period'}); }
     return row;
   },
+  // Full reset before a clean re-upload. monthly_data/selections/documents all
+  // have `on delete cascade` FKs to vehicles/months, so deleting those two
+  // tables (org-scoped) is enough — everything downstream cascades with them.
+  async purgeOrgData(){
+    if(!this.sb)return;
+    await this.sb.from('vehicles').delete().eq('org',this.org);
+    await this.sb.from('months').delete().eq('org',this.org);
+  },
   async uploadProof(path,file){
     if(!this.sb)return false;
     const {error}=await this.sb.storage.from('proofs').upload(path,file,{upsert:true});
@@ -2660,7 +2680,22 @@ async function publishUpload(){
   showToast(n+' finition(s) importée(s) — direction Pilotage pour publier');
   renderDataAdmin();
 }
-function resetData(){[LS.upload,LS.uploadMeta,LS.cycle,LS.sel].forEach(k=>localStorage.removeItem(k));location.reload();}
+function openPurgeConfirm(){
+  document.getElementById('purgeOrgName').innerText=CFG.org||'Auto Nejma';
+  document.getElementById('purgeConfirmInput').value='';
+  document.getElementById('purgeConfirmBtn').disabled=true;
+  openModal('purgeModal');
+}
+async function confirmPurge(){
+  const btn=document.getElementById('purgeConfirmBtn');
+  btn.disabled=true; btn.innerText='Suppression…';
+  if(Store.LIVE){
+    try{ await Store.purgeOrgData(); }
+    catch(e){ showToast('Échec de la suppression : '+e.message); btn.disabled=false; btn.innerText='🗑 Supprimer définitivement'; return; }
+  }
+  [LS.upload,LS.uploadMeta,LS.cycle,LS.sel,LS.cohnotes].forEach(k=>localStorage.removeItem(k));
+  location.reload();
+}
 function renderDataAdmin(){
   const meta=load(LS.uploadMeta,null);
   const sel=document.getElementById('daTarget');
