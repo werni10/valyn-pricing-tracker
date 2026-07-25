@@ -2156,11 +2156,12 @@ const Store = {
                                                                // whenever the live org had 0 vehicles yet.
     BROADCASTS = (brs||[]).map(b=>({id:b.id,title:b.title,body:b.body,priority:b.priority,kind:b.kind||'alert',from:b.from_name,date:new Date(b.created_at).toLocaleString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}));
     READS = {}; READS[uid] = (rd||[]).map(r=>r.broadcast_id);
-    if((mo||[]).length){
-      CYCLE = mo.map(m=>({id:m.id,period:String(m.period).slice(0,7),org:m.org,status:m.status,submittedAt:m.submitted_at,publishedAt:m.published_at}));
-      SELECTIONS = {};
-      (sels||[]).forEach(s=>{ const row=mo.find(m=>m.id===s.month_id); if(!row)return; const p=String(row.period).slice(0,7); (SELECTIONS[p]=SELECTIONS[p]||[]).push(s.vehicle_id); });
-    }
+    // DB truth, even if empty — same reasoning as VEHICLES above: a guard here
+    // left the fabricated defaultCycle() bootstrap months on screen forever.
+    const mos = mo||[];
+    CYCLE = mos.map(m=>({id:m.id,period:String(m.period).slice(0,7),org:m.org,status:m.status,submittedAt:m.submitted_at,publishedAt:m.published_at}));
+    SELECTIONS = {};
+    (sels||[]).forEach(s=>{ const row=mos.find(m=>m.id===s.month_id); if(!row)return; const p=String(row.period).slice(0,7); (SELECTIONS[p]=SELECTIONS[p]||[]).push(s.vehicle_id); });
     DOCUMENTS = (docs||[]).map(d=>({id:d.id,vehicleId:d.vehicle_id,period:d.period?String(d.period).slice(0,7):null,type:d.type,path:d.file_path,name:d.file_name,visibility:d.visibility,createdAt:d.created_at}));
   },
   async persistAccount(a){ if(!this.sb)return; await this.sb.from('profiles').update({name:a.name,org:a.org,role:a.role,active:a.active,rights:a.rights}).eq('id',a.id); },
