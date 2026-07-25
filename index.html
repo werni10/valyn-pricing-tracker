@@ -322,6 +322,7 @@
       <button class="nav-link" data-page="vdash" data-cap="vdash" data-admin="1"><span class="ico">⌁</span>Dashboard Valyn</button>
       <button class="nav-link" data-page="master" data-cap="master" data-admin="1"><span class="ico">◌</span>Master Data</button>
       <button class="nav-link" data-page="dataadmin" data-cap="dataadmin" data-admin="1"><span class="ico">⬆</span>Import données (xlsx) <span class="badge">Admin</span></button>
+      <button class="nav-link" data-page="integration" data-cap="integration" data-admin="1"><span class="ico">◎</span>Analyse prix — Intégration</button>
       <button class="nav-link" data-page="control" data-cap="control" data-admin="1"><span class="ico">✓</span>Analyse & contrôle</button>
       <button class="nav-link" data-page="coherence" data-cap="coherence" data-admin="1"><span class="ico">≋</span>Cohérence intermensuelle</button>
       <button class="nav-link" data-page="pilotage" data-cap="pilotage" data-admin="1"><span class="ico">◈</span>Pilotage mensuel</button>
@@ -892,6 +893,27 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
       </div>
     </section>
 
+    <!-- INTEGRATION (Valyn) -->
+    <section class="page" id="integration">
+      <div class="card">
+        <div class="section-head">
+          <div><h3>Analyse prix — Intégration</h3><p>Prix showroom, prix CEM et commentaire pour les finitions sélectionnées par le client pour <strong id="intgPeriodLabel">—</strong>.</p></div>
+          <span class="chip chip-track" id="intgCount">— référence(s)</span>
+        </div>
+        <div id="intgWarning"></div>
+        <div class="table-wrap" style="margin-top:12px">
+          <table>
+            <thead><tr><th>Statut</th><th>Marque / Modèle</th><th>Finition</th><th class="num">Prix showroom TTC</th><th class="num">Prix CEM TTC</th><th>Commentaire</th><th>Alerte</th><th>Justificatifs</th></tr></thead>
+            <tbody id="integrationBody"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+          <button class="btn btn-light" onclick="saveIntegrationDraft()">💾 Sauvegarder le brouillon</button>
+          <button class="btn btn-primary" onclick="launchIntegrationCalc()">▶ Lancer le calcul et l'analyse</button>
+        </div>
+      </div>
+    </section>
+
     <!-- CONTROL (Valyn) -->
     <section class="page" id="control">
       <div class="card">
@@ -1081,6 +1103,7 @@ remise_commerciale = remise_totale − remise_fiscale<br/>
     vdash:`<svg width="17" height="17" viewBox="0 0 24 24" ${s}><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="10" width="7" height="11" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>`,
     master:`<svg width="17" height="17" viewBox="0 0 24 24" ${s}><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>`,
     dataadmin:`<svg width="17" height="17" viewBox="0 0 24 24" ${s}><path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><line x1="4" y1="20" x2="20" y2="20"/></svg>`,
+    integration:`<svg width="17" height="17" viewBox="0 0 24 24" ${s}><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="13" x2="12" y2="13"/><line x1="8" y1="17" x2="10" y2="17"/></svg>`,
     control:`<svg width="17" height="17" viewBox="0 0 24 24" ${s}><rect x="5" y="4" width="14" height="17" rx="2"/><rect x="9" y="2" width="6" height="3" rx="1"/><polyline points="9 13 11 15 15 11"/></svg>`,
     coherence:`<svg width="17" height="17" viewBox="0 0 24 24" ${s}><polyline points="3 12 8 12 10 7 14 17 16 12 21 12"/></svg>`,
     pilotage:`<svg width="17" height="17" viewBox="0 0 24 24" ${s}><path d="M4 21V4"/><path d="M4 6h11l-2 3 2 3H4"/></svg>`,
@@ -2093,6 +2116,7 @@ const PAGES={
   coherence:["Cohérence intermensuelle","Variations inhabituelles entre le mois courant et les données antérieures."],
   docs:["Bibliothèque de preuves","Gestion centralisée des catalogues et justificatifs collectés."],
   dataadmin:["Import données mensuelles","Chargez le fichier collecte du mois. Le moteur recalcule tout. Publication séparée via Pilotage."],
+  integration:["Analyse prix — Intégration","Saisie du prix showroom et du prix CEM pour les finitions sélectionnées par le client, mois en préparation."],
   diffusion:["Diffusion & alertes","Composez et envoyez une alerte ou un message à Auto Nejma."],
   users:["Accès & droits","Gérez les comptes Auto Nejma et les modules accessibles à chacun."]
 };
@@ -2116,8 +2140,8 @@ function showToast(msg){ const t=document.getElementById("toast"); t.innerText=m
 
 /* ================= AUTH / ACCOUNTS / RIGHTS ================= */
 const CLIENT_CAPS=['dashboard','tracked','history','compare','priceindex','benchmark','reports','simcem','simremise','engine','catalog','collection','quality','selection','contact','settings'];
-const ADMIN_CAPS=['dataadmin','diffusion','users','pilotage','vdash','master','control','coherence','docs'];
-const CAP_LABEL={dashboard:'Dashboard',tracked:'Finitions trackées',history:'Analyse historique',compare:'Analyse comparative',priceindex:'Price Index',benchmark:'Benchmark',reports:'Rapports & exports',simcem:'Simulateur CEM',simremise:'Simulateur remise',engine:'Moteur d\'analyse',catalog:'Catalogue',collection:'Collecte & preuves',quality:'Contrôle qualité',selection:'Sélection M+1',contact:'Contacter Valyn',settings:'Paramètres',dataadmin:'Import données',diffusion:'Diffusion & alertes',users:'Accès & droits',pilotage:'Pilotage mensuel',vdash:'Dashboard Valyn',master:'Master Data',control:'Analyse & contrôle',coherence:'Cohérence intermensuelle',docs:'Bibliothèque de preuves'};
+const ADMIN_CAPS=['dataadmin','integration','diffusion','users','pilotage','vdash','master','control','coherence','docs'];
+const CAP_LABEL={dashboard:'Dashboard',tracked:'Finitions trackées',history:'Analyse historique',compare:'Analyse comparative',priceindex:'Price Index',benchmark:'Benchmark',reports:'Rapports & exports',simcem:'Simulateur CEM',simremise:'Simulateur remise',engine:'Moteur d\'analyse',catalog:'Catalogue',collection:'Collecte & preuves',quality:'Contrôle qualité',selection:'Sélection M+1',contact:'Contacter Valyn',settings:'Paramètres',dataadmin:'Import données',integration:'Analyse prix — Intégration',diffusion:'Diffusion & alertes',users:'Accès & droits',pilotage:'Pilotage mensuel',vdash:'Dashboard Valyn',master:'Master Data',control:'Analyse & contrôle',coherence:'Cohérence intermensuelle',docs:'Bibliothèque de preuves'};
 const AV_COLORS={admin:{bg:'linear-gradient(135deg,#efc900,#ffe066)',fg:'#151922'},client:{bg:'linear-gradient(135deg,#111827,#374151)',fg:'#ffffff'}};
 function initials(n){return (n.replace(/[^\p{L}\s]/gu,'').trim().split(/\s+/).map(w=>w[0]).filter(Boolean).slice(0,2).join('')||'?').toUpperCase();}
 function grant(list){const r={};CLIENT_CAPS.concat(ADMIN_CAPS).forEach(c=>r[c]=false);list.forEach(c=>r[c]=true);return r;}
@@ -3282,6 +3306,90 @@ function reviewPeriod(){
   const inReview=CYCLE.filter(m=>m.org===org&&['DATA_IN_PROGRESS','CALCULATION_ISSUES','QUALITY_CONTROL'].includes(m.status)).map(m=>m.period).sort();
   return inReview.length?inReview[0]:workingPeriod();
 }
+
+/* ================= INTEGRATION (Valyn) ================= */
+// The grid Valyn fills in for exactly what the client selected — Pilotage's
+// "Démarrer intégration" button moves the period into reviewPeriod()'s set,
+// which is what drives which month shows here.
+function renderIntegration(){
+  const body=document.getElementById('integrationBody'); if(!body) return;
+  const period=reviewPeriod();
+  document.getElementById('intgPeriodLabel').innerText=MLABEL[period]||period;
+  const ids=SELECTIONS[period]||[];
+  const rows=ids.map(id=>VEHICLES.find(v=>v.id===id)).filter(Boolean);
+  document.getElementById('intgCount').innerText=rows.length+' référence(s)';
+  body.innerHTML=rows.length?rows.map(v=>{
+    const d=v.months[period]||{};
+    const isNew=!Object.keys(v.months).some(p=>p<period);
+    const statusChip=isNew?'<span class="chip chip-new">Nouveau</span>':'<span class="chip chip-ok">Suivi</span>';
+    return `<tr>
+      <td>${statusChip}</td>
+      <td><strong>${esc(v.marque)}</strong><br><span style="color:var(--muted);font-size:11px">${esc(v.modele)}</span></td>
+      <td>${esc(v.finition)}</td>
+      <td class="num"><input class="field" style="width:120px;text-align:right" id="intgShow_${v.id}" value="${d.showroom??''}" oninput="refreshIntegrationRow('${v.id}')"></td>
+      <td class="num"><input class="field" style="width:120px;text-align:right" id="intgCem_${v.id}" value="${d.cemObs??''}" oninput="refreshIntegrationRow('${v.id}')"></td>
+      <td><input class="field" style="width:160px" id="intgCom_${v.id}" value="${esc(v.comment||'')}"></td>
+      <td id="intgAlert_${v.id}"></td>
+      <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="openProof('${v.id}','catalogue')">Catalogue</button> <button class="btn btn-ghost btn-sm" onclick="openProof('${v.id}','proforma')">Devis</button></td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="8" style="text-align:center;color:var(--muted)">Aucune sélection transmise par le client pour ce mois.</td></tr>';
+  rows.forEach(v=>refreshIntegrationRow(v.id));
+  renderIntegrationWarnings(period);
+}
+function refreshIntegrationRow(id){
+  const v=VEHICLES.find(x=>x.id===id); if(!v)return;
+  const show=num(document.getElementById('intgShow_'+id));
+  const cem=num(document.getElementById('intgCem_'+id));
+  const cell=document.getElementById('intgAlert_'+id); if(!cell)return;
+  if(!show||!cem){ cell.innerHTML='<span class="chip chip-muted">—</span>'; return; }
+  if(cem>show){ cell.innerHTML='<span class="chip chip-alert">CEM &gt; showroom</span>'; return; }
+  const remise=solveRemiseFromCEM(show,0,v.fi,v.type,cem);
+  const e=engine(show,0,remise,v.fi,v.type);
+  cell.innerHTML = e.AB>0.08 ? '<span class="chip chip-alert">Alerte</span>' : '<span class="chip chip-ok">OK</span>';
+}
+function renderIntegrationWarnings(period){
+  const el=document.getElementById('intgWarning'); if(!el)return;
+  const blocking=blockingAnomalies(period);
+  el.innerHTML = blocking.length ? `<div class="empty-note" style="text-align:left;color:var(--red);margin-bottom:10px">⚠ ${blocking.length} incohérence(s) détectée(s) : ${blocking.map(v=>esc(v.marque+' '+v.modele+' '+v.finition)).join(', ')} — à justifier dans Cohérence intermensuelle.</div>` : '';
+}
+function collectIntegrationRecs(period){
+  const ids=SELECTIONS[period]||[];
+  const recs=[];
+  ids.forEach(id=>{
+    const v=VEHICLES.find(x=>x.id===id); if(!v)return;
+    const show=num(document.getElementById('intgShow_'+id));
+    const cem=num(document.getElementById('intgCem_'+id));
+    if(!show||!cem)return;                              // incomplete row — leave untouched, don't wipe with blanks
+    const comment=document.getElementById('intgCom_'+id).value;
+    recs.push({marque:v.marque,modele:v.modele,motor:v.motor,finition:v.finition,segment:v.segment,
+      type:v.type,typeProvided:false,fi:v.fi,fiProvided:false,showroom:show,cemObs:cem,comment});
+  });
+  return recs;
+}
+async function persistIntegration(period,recs){
+  applyUpload(recs,period);
+  if(Store.LIVE) await Store.upsertMonthly(recs,period);
+  else{ const ups=load(LS.upload,{})||{}; ups[period]=recs; save(LS.upload,ups); save(LS.uploadMeta,{when:new Date().toLocaleString('fr-FR'),count:recs.length,period}); }
+}
+async function saveIntegrationDraft(){
+  const period=reviewPeriod();
+  const recs=collectIntegrationRecs(period);
+  if(!recs.length){ showToast('Aucune ligne complète à enregistrer'); return; }
+  await persistIntegration(period,recs);
+  renderAll();
+  showToast(recs.length+' finition(s) enregistrée(s) en brouillon');
+}
+async function launchIntegrationCalc(){
+  const period=reviewPeriod();
+  const ids=SELECTIONS[period]||[];
+  const recs=collectIntegrationRecs(period);
+  if(recs.length<ids.length){ showToast((ids.length-recs.length)+' finition(s) incomplète(s) — renseignez showroom et CEM pour toutes les lignes.'); return; }
+  await persistIntegration(period,recs);
+  const row=cycleRow(period);
+  if(row&&STAGE_ORDER.indexOf(row.status)<STAGE_ORDER.indexOf('QUALITY_CONTROL')){ row.status='QUALITY_CONTROL'; saveCycle(); if(Store.LIVE) await Store.upsertMonth(period,row.status,{}); }
+  renderAll();
+  showToast('Calcul lancé — direction Analyse & contrôle');
+}
 function renderControl(){
   const el=document.getElementById('controlBody'); if(!el) return;
   const period=reviewPeriod(), cmp=CURRENT;
@@ -3358,7 +3466,7 @@ function renderAll(){
   renderTracked(); renderHistory(); renderCompare(); renderPriceIndex(); renderBenchmark();
   renderCatalog(); renderQuality(); renderEngineExample(); calcSimCEM(); calcSimRemise();
   renderUsers(); renderDiffusion(); renderDataAdmin(); renderNotif();
-  renderSelection(); renderPilotage();
+  renderSelection(); renderPilotage(); renderIntegration();
   renderTickets(); renderSettings(); renderVdash(); renderMaster(); renderControl(); renderCoherence(); renderDocs(); renderCollectionDocs();
 }
 function bootSession(){
