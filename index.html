@@ -1223,6 +1223,20 @@ function scope(m){ return VEHICLES.filter(v=>{const x=vehMonth(v,m); return x&&x
 // Excel/CSV files and must never be trusted as markup.
 const ESC_MAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,c=>ESC_MAP[c]); }
+// Strip stray quote wrapping (single, double, or doubled: "x", 'x', ''x'', ""x"")
+// picked up from re-imported CSV exports or manual entry, and collapse whitespace.
+// Loops because a value can be wrapped more than once ("'x'" etc).
+function cleanText(s){
+  let t=String(s==null?'':s).trim();
+  for(let i=0;i<3;i++){
+    const c=t[0];
+    if(t.length>=2 && (c==='"'||c==="'") && t[t.length-1]===c) t=t.slice(1,-1).trim();
+    else break;
+  }
+  return t.replace(/\s+/g,' ').trim();
+}
+// Same, uppercased — so ''audi'', "audi", 'audi', AUDI, audi all collapse to one brand.
+function cleanBrand(s){ return cleanText(s).toUpperCase(); }
 // CSV formula-injection guard: a cell whose text starts with =,+,-,@ (or tab/CR)
 // is executed as a formula by Excel/Sheets on open. Prefix with an apostrophe to
 // force plain-text — vehicle fields originate from uploaded files, never trust them.
@@ -1747,7 +1761,7 @@ function priceIndexRows(seg){
   const rows=[];
   scope(CURRENT).filter(v=>v.segment===seg).forEach(v=>{
     const e=vehMonth(v,CURRENT).e;
-    rows.push({name:`${esc(v.marque)} ${esc(v.modele)} ${esc(v.finition)}`, pub:e.pvpTTC, remise:e.remise, transac:e.Q, luxe:e.R, client:true});
+    rows.push({name:`${v.marque} ${v.modele} ${v.finition}`, pub:e.pvpTTC, remise:e.remise, transac:e.Q, luxe:e.R, client:true});
   });
   BENCH.filter(b=>b.seg===seg).forEach(b=>{
     if(b.na){ rows.push({name:`${b.marque} ${b.label}`, na:true}); return; }
@@ -2070,7 +2084,10 @@ const Store = {
   _capFill(r){ const o={}; CLIENT_CAPS.concat(ADMIN_CAPS).forEach(c=>o[c]=!!(r&&r[c])); return o; },
   _profToAcc(p){ return {id:p.id,name:p.name,org:p.org,role:p.role,email:p.email,active:p.active,rights:this._capFill(p.rights)}; },
   _rowsToVehicles(vs,md){
-    const by={}; vs.forEach(v=>{ by[v.id]={id:v.id,marque:v.marque,modele:v.modele,motor:v.motor||'',finition:v.finition||'',segment:v.segment||'Divers',type:v.type||'Thermique',fi:v.fi||FI_DEFAULT,catalogue:Number(v.catalogue)||0,role:v.vrole||'client',comment:v.comment||'',statutOverride:v.status_override||undefined,months:{}}; });
+    // cleanText/cleanBrand here self-heals rows corrupted by the old naive CSV
+    // parser (stray quotes baked into marque/modele/finition/segment) — display-only,
+    // doesn't rewrite the DB row, so a real re-import is still the full fix.
+    const by={}; vs.forEach(v=>{ by[v.id]={id:v.id,marque:cleanBrand(v.marque),modele:cleanText(v.modele),motor:cleanText(v.motor)||'',finition:cleanText(v.finition)||'',segment:cleanText(v.segment)||'Divers',type:v.type||'Thermique',fi:v.fi||FI_DEFAULT,catalogue:Number(v.catalogue)||0,role:v.vrole||'client',comment:cleanText(v.comment)||'',statutOverride:v.status_override||undefined,months:{}}; });
     md.forEach(m=>{ const v=by[m.vehicle_id]; if(!v)return; const key=String(m.period).slice(0,7); const o={showroom:Number(m.showroom)}; if(m.remise!=null)o.remise=Number(m.remise); if(m.cem_obs!=null)o.cemObs=Number(m.cem_obs); v.months[key]=o; });
     return Object.values(by);
   },
@@ -2403,6 +2420,24 @@ function norm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[�
 // exactly, else 'fi' greedily substring-matches inside 'Finition' and grabs the wrong column.
 function pick(headers,cands){for(const c of cands){const nc=norm(c);const i=headers.findIndex(h=>{const nh=norm(h);return nh===nc||(nc.length>3&&nh.includes(nc));});if(i>=0)return i;}return -1;}
 function parseNum(v){if(v==null||v==='')return null;const n=parseFloat(String(v).replace(/\s/g,'').replace(/[^\d.,-]/g,'').replace(',','.'));return isNaN(n)?null:n;}
+// RFC4180-ish single-line CSV split: respects "quoted, fields" (delimiter and
+// newlines inside quotes, doubled "" as an escaped quote) instead of a blind split.
+function parseCSVLine(line,delim){
+  const out=[]; let cur=''; let inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(inQ){
+      if(c==='"'){ if(line[i+1]==='"'){ cur+='"'; i++; } else inQ=false; }
+      else cur+=c;
+    } else {
+      if(c==='"') inQ=true;
+      else if(c===delim){ out.push(cur); cur=''; }
+      else cur+=c;
+    }
+  }
+  out.push(cur);
+  return out;
+}
 // Real monthly files sometimes carry a title/date row above the real header,
 // so locate the header by content (the "Marque" cell) instead of assuming rows[0].
 function rowsToRecords(rows,refMap){
@@ -2422,16 +2457,16 @@ function rowsToRecords(rows,refMap){
     // the monthly "Input Data" sheet doesn't carry Segment/FI itself — they live in
     // "Ref Segment&FI" keyed by Key_Version, so fall back to that join when the
     // column isn't present in this sheet.
-    const kv=ix.kv>=0?String(r[ix.kv]||'').trim():'';
+    const kv=ix.kv>=0?cleanText(r[ix.kv]):'';
     const ref=refMap&&kv?refMap[norm(kv)]:null;
     const fiVal=ix.fi>=0?parseNum(r[ix.fi]):(ref&&ref.fi!=null?ref.fi:null);
-    const segVal=(ix.seg>=0&&r[ix.seg])?String(r[ix.seg]).trim():(ref&&ref.segment?ref.segment:'');
-    const typeVal=(ix.type>=0&&r[ix.type])?String(r[ix.type]).trim():null;
-    recs.push({marque:String(marque).toUpperCase().trim(),modele:String(modele).trim(),
-      motor:ix.motor>=0?String(r[ix.motor]||'').trim():'',finition:ix.finition>=0?String(finition||'').trim():'',
+    const segVal=(ix.seg>=0&&r[ix.seg])?cleanText(r[ix.seg]):(ref&&ref.segment?ref.segment:'');
+    const typeVal=(ix.type>=0&&r[ix.type])?cleanText(r[ix.type]):null;
+    recs.push({marque:cleanBrand(marque),modele:cleanText(modele),
+      motor:ix.motor>=0?cleanText(r[ix.motor]):'',finition:ix.finition>=0?cleanText(finition):'',
       segment:segVal||'Divers',type:typeVal||'Thermique',typeProvided:typeVal!=null,
       showroom:show,cemObs:cem,fi:fiVal??FI_DEFAULT,fiProvided:fiVal!=null,
-      comment:ix.com>=0?String(r[ix.com]||'').trim():''});
+      comment:ix.com>=0?cleanText(r[ix.com]):''});
   }
   return recs;
 }
@@ -2490,7 +2525,13 @@ async function handleFile(file){
     try{
       let rows,refMap=null;
       if(/\.csv$/i.test(file.name)){
-        rows=String(e.target.result).split(/\r?\n/).filter(l=>l.trim()).map(l=>l.split(/;|,\t|\t/).length>1?l.split(/;|\t/):l.split(','));
+        // Quote-aware split — our own exportCSV() wraps every field in "...", and a
+        // naive split leaves those quote characters baked into the data (that's the
+        // ""AUDI"" corruption seen when a downloaded export gets re-uploaded).
+        rows=String(e.target.result).split(/\r?\n/).filter(l=>l.trim()).map(l=>{
+          const delim=/[;\t]/.test(l)?(l.includes(';')?';':'\t'):',';
+          return parseCSVLine(l,delim);
+        });
       } else {
         const wb=XLSX.read(e.target.result,{type:'binary'});
         const targetSel=document.getElementById('daTarget');
@@ -2822,11 +2863,11 @@ function renderMaster(){
   }).join('')||'<tr><td colspan="8" class="empty-note">Aucun résultat pour ces filtres.</td></tr>';
 }
 async function addMasterVehicle(){
-  const marque=document.getElementById('mMarque').value.trim().toUpperCase();
-  const modele=document.getElementById('mModele').value.trim();
-  const motor=document.getElementById('mMotor').value.trim();
-  const finition=document.getElementById('mFinition').value.trim();
-  const segment=document.getElementById('mSegment').value.trim()||'Divers';
+  const marque=cleanBrand(document.getElementById('mMarque').value);
+  const modele=cleanText(document.getElementById('mModele').value);
+  const motor=cleanText(document.getElementById('mMotor').value);
+  const finition=cleanText(document.getElementById('mFinition').value);
+  const segment=cleanText(document.getElementById('mSegment').value)||'Divers';
   const type=document.getElementById('mType').value;
   const catalogue=num(document.getElementById('mCatalogue'));
   const fi=num(document.getElementById('mFi'))||FI_DEFAULT;
