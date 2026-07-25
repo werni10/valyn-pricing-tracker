@@ -2149,8 +2149,11 @@ const Store = {
       this.sb.from('documents').select('*').order('created_at',{ascending:false})
     ]);
     ACCOUNTS = (profs||[]).map(p=>this._profToAcc(p));
-    const built = this._rowsToVehicles(vs||[], md||[]);
-    if(built.length) VEHICLES = built;                      // replace seed with DB truth
+    VEHICLES = this._rowsToVehicles(vs||[], md||[]);         // DB truth, even if empty — hydrate()
+                                                               // only ever runs after a real live login,
+                                                               // so a guard on non-empty here silently
+                                                               // kept the hardcoded demo seed on screen
+                                                               // whenever the live org had 0 vehicles yet.
     BROADCASTS = (brs||[]).map(b=>({id:b.id,title:b.title,body:b.body,priority:b.priority,kind:b.kind||'alert',from:b.from_name,date:new Date(b.created_at).toLocaleString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}));
     READS = {}; READS[uid] = (rd||[]).map(r=>r.broadcast_id);
     if((mo||[]).length){
