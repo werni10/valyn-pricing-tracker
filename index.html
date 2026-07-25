@@ -2208,13 +2208,28 @@ const Store = {
       {onConflict:'vehicle_id,period'}); }
     return row;
   },
-  // Full reset before a clean re-upload. monthly_data/selections/documents all
-  // have `on delete cascade` FKs to vehicles/months, so deleting those two
-  // tables (org-scoped) is enough — everything downstream cascades with them.
+  // Full reset before a clean re-upload. Deletes explicitly in dependency
+  // order (documents/selections/monthly_data before vehicles/months) instead
+  // of relying on `on delete cascade` alone, and checks every response —
+  // an RLS mismatch or FK error otherwise fails silently (0 rows affected,
+  // no thrown error) and the caller would wrongly think the purge worked.
   async purgeOrgData(){
     if(!this.sb)return;
-    await this.sb.from('vehicles').delete().eq('org',this.org);
-    await this.sb.from('months').delete().eq('org',this.org);
+    const {data:vs,error:e1}=await this.sb.from('vehicles').select('id').eq('org',this.org);
+    if(e1)throw e1;
+    const vids=(vs||[]).map(v=>v.id);
+    if(!vids.length) throw new Error(`Aucun véhicule trouvé pour "${this.org}" — rien à supprimer (vérifiez la config org / droits admin).`);
+    const {error:e2}=await this.sb.from('documents').delete().eq('org',this.org);
+    if(e2)throw e2;
+    const {error:e3}=await this.sb.from('selections').delete().in('vehicle_id',vids);
+    if(e3)throw e3;
+    const {error:e4}=await this.sb.from('monthly_data').delete().in('vehicle_id',vids);
+    if(e4)throw e4;
+    const {data:dv,error:e5}=await this.sb.from('vehicles').delete().eq('org',this.org).select('id');
+    if(e5)throw e5;
+    if(!dv||dv.length!==vids.length) throw new Error(`Suppression bloquée : ${vids.length} véhicule(s) trouvés mais ${dv?dv.length:0} supprimé(s) — droits admin insuffisants côté Supabase.`);
+    const {error:e6}=await this.sb.from('months').delete().eq('org',this.org);
+    if(e6)throw e6;
   },
   async uploadProof(path,file){
     if(!this.sb)return false;
