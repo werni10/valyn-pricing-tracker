@@ -111,6 +111,12 @@
   .table-wrap::-webkit-scrollbar-thumb:hover{background:#98a1b2}
   /* history tables: give every month column room instead of squeezing them */
   .table-wrap.hist table{min-width:1180px}
+  /* combined view: 7 months x (prix public, remise, CEM) — deliberately wide, scroll sideways */
+  .table-wrap.histAll table{min-width:2500px}
+  .table-wrap.histAll thead tr:first-child th{top:0}
+  .table-wrap.histAll thead tr:nth-child(2) th{top:38px}
+  .table-wrap.histAll th.mstart,.table-wrap.histAll td.mstart{border-left:2px solid #e3e8ef}
+  .table-wrap.histAll th.mhead{text-align:center;color:#111827;background:#eef2f7}
   /* segment banner rows span the full width — they must not stick to the left */
   tr.seg-row td{position:static!important;background:#f1f5f9!important;font-weight:900}
   /* keep the segment label readable while the table is scrolled sideways */
@@ -484,10 +490,15 @@
         </div>
         <div class="filters" style="margin-top:4px">
           <span style="align-self:center;color:var(--muted);font-size:12.5px">Aller à :</span>
+          <button class="btn btn-light" onclick="jumpHist('All')">Vue par mois (tout)</button>
           <button class="btn btn-light" onclick="jumpHist('Pub')">Prix public</button>
           <button class="btn btn-light" onclick="jumpHist('Rem')">Remises</button>
           <button class="btn btn-light" onclick="jumpHist('Cem')">Prix remisés (CEM)</button>
         </div>
+      </div>
+      <div class="card" style="margin-top:16px" id="histCardAll">
+        <div class="section-head"><div><h3>Vision historique par mois</h3><p>Pour chaque mois : prix public, remise et prix CEM côte à côte. Faites défiler horizontalement pour parcourir tous les mois.</p></div><span class="chip chip-muted" id="histCountAll">—</span></div>
+        <div class="table-wrap histAll" style="max-height:520px"><table><thead id="histHeadAll"></thead><tbody id="histBodyAll"></tbody></table></div>
       </div>
       <div class="card" style="margin-top:16px" id="histCardPub">
         <div class="section-head"><div><h3>Prix public</h3><p>Prix showroom TTC par mois.</p></div><span class="chip chip-muted" id="histCountPub">—</span></div>
@@ -1800,6 +1811,29 @@ function renderHistory(){
   document.getElementById('histBodyPub').innerHTML=build(x=>fmt(x.showroom),false);
   document.getElementById('histBodyRem').innerHTML=build(x=>x.e?fmtP(x.e.remise):'—',false);
   document.getElementById('histBodyCem').innerHTML=build(x=>x.e?fmt(x.e.CEM):'—',true);
+
+  // Combined view: every month shown with its three metrics side by side, so the
+  // full monthly history reads left-to-right in one pass instead of forcing a
+  // jump between three separate tables.
+  const headAll=document.getElementById('histHeadAll');
+  if(headAll){
+    headAll.innerHTML=
+      '<tr><th rowspan="2" style="min-width:300px">Segment<br><span style="font-weight:400;padding-left:14px">Version</span></th>'
+      +MONTHS.map(m=>`<th class="mhead mstart" colspan="3">${esc(MLABEL[m]||m)}</th>`).join('')+'</tr>'
+      +'<tr>'+MONTHS.map(()=>'<th class="num mstart">Prix public</th><th class="num">Remise</th><th class="num">Prix CEM</th>').join('')+'</tr>';
+    const colspanAll=MONTHS.length*3+1;
+    const segHeadAll=seg=>`<tr class="seg-row"><td colspan="${colspanAll}"><span>${esc(seg)}</span></td></tr>`;
+    const rowAll=v=>MONTHS.map(m=>{
+      const x=vehMonth(v,m);
+      if(!x) return '<td class="num mstart">—</td><td class="num">—</td><td class="num">—</td>';
+      return `<td class="num mstart">${fmt(x.showroom)}</td><td class="num">${x.e?fmtP(x.e.remise):'—'}</td><td class="num">${x.e?fmt(x.e.CEM):'—'}</td>`;
+    }).join('');
+    document.getElementById('histBodyAll').innerHTML=groups.map(g=>segHeadAll(g.seg)+g.items.map(v=>
+      `<tr><td style="padding-left:18px">${esc(fullName(v))}</td>${rowAll(v)}</tr>`).join('')).join('')
+      ||`<tr><td colspan="${colspanAll}" class="empty-note">Aucun résultat pour ces filtres.</td></tr>`;
+    const cAll=document.getElementById('histCountAll');
+    if(cAll) cAll.innerText=label;
+  }
 }
 // Three full-width tables stack to ~9000px, so "Prix remisés" was effectively
 // unreachable by scrolling — each table now scrolls in place and these jump
