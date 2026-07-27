@@ -1352,7 +1352,10 @@ function num(el){ return parseFloat(String(el.value).replace(/\s/g,'').replace('
 // months transmitted to the client (published now + previously published/archived)
 function transmittedPeriods(){
   const org=CFG.org||'Auto Nejma';
-  return CYCLE.filter(m=>m.org===org&&(m.status==='PUBLISHED'||m.status==='ARCHIVED')).map(m=>m.period).sort();
+  // a month only counts as transmitted if it is BOTH published/archived AND
+  // actually holds data — a cycle row on its own proves nothing was delivered.
+  const withData=new Set(dataPeriods());
+  return CYCLE.filter(m=>m.org===org&&(m.status==='PUBLISHED'||m.status==='ARCHIVED')&&withData.has(m.period)).map(m=>m.period).sort();
 }
 function renderKPI(){
   const sc = scope(CURRENT);
