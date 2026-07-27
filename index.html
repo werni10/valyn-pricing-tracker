@@ -2333,7 +2333,7 @@ const Store = {
         v=data; cache[key]=v;
       }
       const {error:e2}=await this.sb.from('monthly_data').upsert(
-        {vehicle_id:v.id,period:r.period+'-01',showroom:r.showroom,cem_obs:r.cemObs},
+        {vehicle_id:v.id,period:r.period+'-01',showroom:r.showroom,cem_obs:r.cemObs,remise:r.remise},
         {onConflict:'vehicle_id,period'});
       if(e2)throw e2;
     }
@@ -2777,6 +2777,80 @@ function guessImportedType(marque,fullName){
 // is a derived commercial-effort metric — not needed, the app derives remise
 // itself from showroom+CEM+FI+type via solveRemiseFromCEM, same as the normal
 // monthly import already does).
+// Authoritative historical source: the per-month "Analyse quantitative MM.YY"
+// sheets. Each one IS that month's analysed perimeter ("Nombre de référence"),
+// and carries every field we need — marque/modèle/motorisation/finition, type,
+// segment, FI, catalogue, showroom, remise %, CEM — for all brands tracked.
+// The Evolution sheet (parseEvolutionSheet below) only keeps versions with a
+// continuous price line, so it silently drops real references: Déc 25 has 36
+// references there but only 20 survive in Evolution. This reads the real thing.
+function parseQuantSheets(wb){
+  const out={};                       // key -> version record
+  const periods=[];
+  wb.SheetNames.filter(n=>/^analyse\s*quantitative/i.test(n)).forEach(sn=>{
+    const period=sheetNameToPeriod(sn); if(!period)return;
+    const aoa=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});
+    const hIdx=aoa.findIndex(r=>r.some(c=>norm(c)==='keyversion'));
+    if(hIdx<0)return;
+    // Déc 25 splits its header over two rows: the identity labels (Marque…
+    // Key_Version) sit one row below the price labels (Prix Showroom TTC…).
+    // Merge the Key_Version row with the one above it, per column.
+    const above=aoa[hIdx-1]||[];
+    const H=aoa[hIdx].map((c,j)=>String(c||'').trim()||String(above[j]||'').trim());
+    const ix={marque:pick(H,['marque']),modele:pick(H,['modele','modèle']),motor:pick(H,['motorisation']),
+      finition:pick(H,['finition']),kv:pick(H,['keyversion']),type:pick(H,['typedemotorisation']),
+      seg:pick(H,['segment']),cat:pick(H,['prixcatalogue']),show:pick(H,['prixshowroomttc']),
+      rem:pick(H,['remiseen']),cem:pick(H,['prixremisettccem']),fi:pick(H,['fraisdimmatriculation']),
+      com:pick(H,['autrescommentaires','commentaire','remarques'])};
+    if(ix.kv<0||ix.show<0)return;
+    periods.push(period);
+    let blanks=0;
+    for(let i=hIdx+1;i<aoa.length;i++){
+      const r=aoa[i];
+      const kv=cleanText(r[ix.kv]||'');
+      if(!kv){ if(++blanks>=2)break; continue; }
+      blanks=0;
+      if(norm(r[ix.marque])==='marque')continue;                 // banded sub-header row
+      const marque=cleanBrand(r[ix.marque]||'');
+      const modele=cleanText(r[ix.modele]||'');
+      const finition=cleanText(r[ix.finition]||'');
+      if(!marque||!modele)continue;
+      // motor is part of the identity here: "BMW X5 PACK M" exists as both a 30d
+      // and a 50e; collapsing them would silently merge two price histories.
+      const key=norm(marque)+'|'+norm(modele)+'|'+norm(r[ix.motor]||'')+'|'+norm(finition);
+      const show=parseNum(r[ix.show]), cem=ix.cem>=0?parseNum(r[ix.cem]):null, rem=ix.rem>=0?parseNum(r[ix.rem]):null;
+      const rec=out[key]||(out[key]={name:kv,marque,modele,motor:cleanText(r[ix.motor]||''),finition,
+        segment:ix.seg>=0?cleanText(r[ix.seg]||''):'',type:ix.type>=0?cleanText(r[ix.type]||''):'',
+        fi:ix.fi>=0?parseNum(r[ix.fi]):null,catalogue:ix.cat>=0?parseNum(r[ix.cat]):null,
+        comment:'',role:'client',periods:{}});
+      // later months win for descriptive fields — they reflect the current state
+      if(ix.seg>=0&&cleanText(r[ix.seg]))rec.segment=cleanText(r[ix.seg]);
+      if(ix.type>=0&&cleanText(r[ix.type]))rec.type=cleanText(r[ix.type]);
+      if(ix.fi>=0&&parseNum(r[ix.fi])!=null)rec.fi=parseNum(r[ix.fi]);
+      if(ix.cat>=0&&parseNum(r[ix.cat])!=null)rec.catalogue=parseNum(r[ix.cat]);
+      if(ix.com>=0&&cleanText(r[ix.com]))rec.comment=cleanText(r[ix.com]);
+      if(show==null)continue;                                    // no price this month => not tracked then
+      const d={showroom:show};
+      if(cem!=null&&cem>0)d.cemObs=cem;
+      else if(rem!=null)d.remise=rem;                            // remise-only rows still belong in the tables
+      rec.periods[period]=d;
+    }
+  });
+  const list=Object.values(out).filter(v=>Object.keys(v.periods).length);
+  list.forEach(v=>{
+    if(!v.segment)v.segment='Divers';
+    if(!v.type)v.type=guessImportedType(v.marque,v.name);
+    if(v.fi==null)v.fi=FI_DEFAULT;
+    if(v.catalogue==null){ const first=Object.values(v.periods)[0]; v.catalogue=first?first.showroom:0; }
+  });
+  // Vehicle identity app-wide is (marque,modele,finition) — no motor. Where two
+  // distinct motorisations share a finition name, fold motor into the finition
+  // so both survive as separate vehicles instead of overwriting each other.
+  const byId={};
+  list.forEach(v=>{ const k=norm(v.marque)+'|'+norm(v.modele)+'|'+norm(v.finition); (byId[k]=byId[k]||[]).push(v); });
+  Object.values(byId).forEach(g=>{ if(g.length>1) g.forEach(v=>{ v.finition=(v.finition+' — '+v.motor).trim(); }); });
+  return {versions:list,periods:[...new Set(periods)].sort()};
+}
 function parseEvolutionSheet(wb){
   const sn=wb.SheetNames.find(n=>/price.*index.*evolution|evolution.*price.*index/i.test(n));
   if(!sn)throw new Error('Feuille "YTD Price Index Evolution" introuvable dans ce fichier.');
@@ -2932,13 +3006,15 @@ function applyUpload(recs,period){
   period=period||CURRENT;
   recs.forEach(r=>{
     let v=VEHICLES.find(x=>norm(x.marque)===norm(r.marque)&&norm(x.modele)===norm(r.modele)&&norm(x.finition)===norm(r.finition));
-    if(v){v.months[period]={showroom:r.showroom,cemObs:r.cemObs};if(r.comment)v.comment=r.comment;
+    const md={showroom:r.showroom,cemObs:r.cemObs};
+    if(r.cemObs==null&&r.remise!=null)md.remise=r.remise;   // remise-only month: keep it computable
+    if(v){v.months[period]=md;if(r.comment)v.comment=r.comment;
       // real monthly files never carry Type, and FI only when the Ref Segment&FI join found it —
       // don't stomp existing catalog values (EV/hybrid flags, custom FI) with fallback defaults.
       if(r.fiProvided)v.fi=r.fi;if(r.typeProvided)v.type=r.type;delete v.statutOverride;}
     else VEHICLES.push({id:'up'+Math.random().toString(36).slice(2,7),marque:r.marque,modele:r.modele,motor:r.motor||'—',finition:r.finition||'(import)',
       segment:r.segment,type:r.type,fi:r.fi,catalogue:r.showroom,role:r.role||'client',statutOverride:'Nouveau',comment:r.comment||'Importé depuis fichier mensuel.',
-      months:{[period]:{showroom:r.showroom,cemObs:r.cemObs}}});
+      months:{[period]:md}});
   });
 }
 const STAGE_ORDER=['DRAFT_SELECTION','SELECTION_SUBMITTED','DATA_IN_PROGRESS','CALCULATION_ISSUES','QUALITY_CONTROL','READY_TO_PUBLISH','PUBLISHED','ARCHIVED'];
@@ -2985,7 +3061,7 @@ function versionsToRecs(versions,period){
   versions.forEach(v=>{
     const d=v.periods[period]; if(!d)return;
     recs.push({marque:v.marque,modele:v.modele,motor:v.motor,finition:v.finition,segment:v.segment,
-      type:v.type,typeProvided:true,fi:v.fi,fiProvided:true,role:v.role,showroom:d.showroom,cemObs:d.cemObs,comment:''});
+      type:v.type,typeProvided:true,fi:v.fi,fiProvided:true,role:v.role,showroom:d.showroom,cemObs:d.cemObs,remise:d.remise,comment:v.comment||''});
   });
   return recs;
 }
@@ -2999,16 +3075,24 @@ async function handleHistoryFile(file){
   reader.onload=e=>{
     try{
       const wb=XLSX.read(e.target.result,{type:'binary',cellDates:true});
-      const parsed=parseEvolutionSheet(wb);
-      const usable=parsed.filter(p=>!p.skipped);
-      const skipped=parsed.filter(p=>p.skipped);
-      if(!usable.length){ status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Aucune version exploitable trouvée dans la feuille Evolution.</div>'; return; }
-      usable.forEach(v=>{ v.type=guessImportedType(v.marque,v.name); });
+      // Prefer the per-month analysis sheets (the real perimeter); fall back to
+      // the Evolution sheet only if this workbook has none of them.
+      const quant=parseQuantSheets(wb);
+      let usable=quant.versions, skipped=[], source='Analyse quantitative (mensuelles)';
+      if(!usable.length){
+        const parsed=parseEvolutionSheet(wb);
+        usable=parsed.filter(p=>!p.skipped);
+        skipped=parsed.filter(p=>p.skipped);
+        usable.forEach(v=>{ v.type=guessImportedType(v.marque,v.name); });
+        source='YTD Price Index Evolution';
+      }
+      if(!usable.length){ status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Aucune version exploitable trouvée dans ce fichier.</div>'; return; }
       PENDING_HISTORY=usable;
       const periodSet=new Set(); usable.forEach(v=>Object.keys(v.periods).forEach(p=>periodSet.add(p)));
       const periods=[...periodSet].sort();
       const totalPoints=usable.reduce((a,v)=>a+Object.keys(v.periods).length,0);
-      status.innerHTML=`<div class="empty-note" style="text-align:left"><strong>${usable.length} version(s)</strong> sur <strong>${periods.length} mois</strong> (${periods.map(p=>MLABEL[p]||ensureLabel(p)).join(', ')}) — <strong>${totalPoints}</strong> points de données.${skipped.length?`<br><span style="color:var(--focus)">⚠ ${skipped.length} version(s) ignorée(s) (segment/FI ou décomposition marque introuvable) : ${skipped.map(s=>esc(s.name)).join(', ')}</span>`:''}</div>`;
+      const perMonth=periods.map(p=>`${MLABEL[p]||ensureLabel(p)} : ${usable.filter(v=>v.periods[p]).length}`).join(' · ');
+      status.innerHTML=`<div class="empty-note" style="text-align:left"><strong>${usable.length} version(s)</strong> sur <strong>${periods.length} mois</strong> — <strong>${totalPoints}</strong> points de données.<br><span style="color:var(--muted)">Source : ${esc(source)}</span><br><span style="color:var(--muted)">Références par mois — ${esc(perMonth)}</span>${skipped.length?`<br><span style="color:var(--focus)">⚠ ${skipped.length} version(s) ignorée(s) : ${skipped.map(s=>esc(s.name)).join(', ')}</span>`:''}</div>`;
       document.getElementById('historyPreview').innerHTML=`<div class="table-wrap" style="margin-top:12px;max-height:280px"><table><thead><tr><th>Marque</th><th>Modèle</th><th>Finition</th><th>Rôle</th><th>Type</th><th class="num">Mois couverts</th></tr></thead><tbody>${usable.map(v=>`<tr><td>${esc(v.marque)}</td><td>${esc(v.modele)}</td><td>${esc(v.finition)}</td><td>${v.role==='client'?'Suivi client':'Référence'}</td><td>${esc(v.type)}</td><td class="num">${Object.keys(v.periods).length}</td></tr>`).join('')}</tbody></table></div>
         <button class="btn btn-primary" style="margin-top:14px" onclick="publishHistoryImport()">✓ Importer l'historique complet</button>`;
     }catch(err){ status.innerHTML='<div class="empty-note" style="text-align:left;color:var(--red)">Erreur : '+err.message+'</div>'; }
@@ -3037,7 +3121,7 @@ async function publishHistoryImport(){
     try{
       const recs=[];
       versions.forEach(v=>Object.keys(v.periods).forEach(period=>{ const d=v.periods[period];
-        recs.push({marque:v.marque,modele:v.modele,motor:v.motor,finition:v.finition,segment:v.segment,type:v.type,fi:v.fi,role:v.role,period,showroom:d.showroom,cemObs:d.cemObs}); }));
+        recs.push({marque:v.marque,modele:v.modele,motor:v.motor,finition:v.finition,segment:v.segment,type:v.type,fi:v.fi,role:v.role,period,showroom:d.showroom,cemObs:d.cemObs,remise:d.remise}); }));
       await Store.bulkImportHistory(recs);
       for(const p of periods) await Store.upsertMonth(p,cycleRow(p).status,{});
       const u=await Store.getUser(); await Store.hydrate(u.id);
