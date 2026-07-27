@@ -469,18 +469,24 @@
           </select>
           <button class="btn btn-light" onclick="exportHistoryCSV()">⇩ Export CSV</button>
         </div>
+        <div class="filters" style="margin-top:4px">
+          <span style="align-self:center;color:var(--muted);font-size:12.5px">Aller à :</span>
+          <button class="btn btn-light" onclick="jumpHist('Pub')">Prix public</button>
+          <button class="btn btn-light" onclick="jumpHist('Rem')">Remises</button>
+          <button class="btn btn-light" onclick="jumpHist('Cem')">Prix remisés (CEM)</button>
+        </div>
       </div>
-      <div class="card" style="margin-top:16px">
+      <div class="card" style="margin-top:16px" id="histCardPub">
         <div class="section-head"><div><h3>Prix public</h3><p>Prix showroom TTC par mois.</p></div><span class="chip chip-muted" id="histCountPub">—</span></div>
-        <div class="table-wrap"><table><thead id="histHeadPub"></thead><tbody id="histBodyPub"></tbody></table></div>
+        <div class="table-wrap" style="max-height:440px"><table><thead id="histHeadPub"></thead><tbody id="histBodyPub"></tbody></table></div>
       </div>
-      <div class="card" style="margin-top:16px">
+      <div class="card" style="margin-top:16px" id="histCardRem">
         <div class="section-head"><div><h3>Remises</h3><p>Remise totale en % par mois.</p></div><span class="chip chip-muted" id="histCountRem">—</span></div>
-        <div class="table-wrap"><table><thead id="histHeadRem"></thead><tbody id="histBodyRem"></tbody></table></div>
+        <div class="table-wrap" style="max-height:440px"><table><thead id="histHeadRem"></thead><tbody id="histBodyRem"></tbody></table></div>
       </div>
-      <div class="card" style="margin-top:16px">
-        <div class="section-head"><div><h3>Prix remisés</h3><p>Prix clé en main (CEM) TTC par mois.</p></div><span class="chip chip-muted" id="histCountCem">—</span></div>
-        <div class="table-wrap"><table><thead id="histHeadCem"></thead><tbody id="histBodyCem"></tbody></table></div>
+      <div class="card" style="margin-top:16px" id="histCardCem">
+        <div class="section-head"><div><h3>Prix remisés (CEM)</h3><p>Prix clé en main TTC par mois. Cliquez une ligne pour le détail.</p></div><span class="chip chip-muted" id="histCountCem">—</span></div>
+        <div class="table-wrap" style="max-height:440px"><table><thead id="histHeadCem"></thead><tbody id="histBodyCem"></tbody></table></div>
       </div>
     </section>
 
@@ -1781,6 +1787,13 @@ function renderHistory(){
   document.getElementById('histBodyPub').innerHTML=build(x=>fmt(x.showroom),false);
   document.getElementById('histBodyRem').innerHTML=build(x=>x.e?fmtP(x.e.remise):'—',false);
   document.getElementById('histBodyCem').innerHTML=build(x=>x.e?fmt(x.e.CEM):'—',true);
+}
+// Three full-width tables stack to ~9000px, so "Prix remisés" was effectively
+// unreachable by scrolling — each table now scrolls in place and these jump
+// straight to the block you want.
+function jumpHist(k){
+  const el=document.getElementById('histCard'+k); if(!el)return;
+  el.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function exportHistoryCSV(){
   const rows=histRows();
