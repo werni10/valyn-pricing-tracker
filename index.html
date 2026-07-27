@@ -1685,7 +1685,8 @@ function openHistory(id){
   const s=seriesFor(v);
   renderTrendChart('hpSparkCanvas',MONTHS,[{label:'Prix CEM',data:s.cem,color:'#efc900',fill:true},{label:'Prix showroom TTC',data:s.show,color:'#111827',fill:false}]);
   document.getElementById('hpBreakdown').innerHTML=breakdownHTML(e);
-  document.getElementById('hpComment').innerText=v.comment||'—';
+  const mc=(v.months[CURRENT]||{}).comment;
+  document.getElementById('hpComment').innerText=mc||v.comment||'—';
   const vDocs=visibleDocs().filter(d=>d.vehicleId===id);
   const typeLabel={catalogue:'Brochure tarifaire',proforma:'Proforma / devis',photo:'Photo showroom'};
   document.getElementById('hpDocs').innerHTML=vDocs.length?vDocs.map(d=>`<div class="doc">${typeLabel[d.type]||d.type} · ${d.name} <button class="btn btn-ghost btn-sm" onclick="openProof('${id}','${d.type}')">Voir</button></div>`).join(''):'<div class="doc" style="color:var(--muted)">Aucun justificatif attaché — <button class="btn btn-ghost btn-sm" onclick="go(\'collection\')">joindre un document</button></div>';
@@ -2271,7 +2272,7 @@ const Store = {
     // parser (stray quotes baked into marque/modele/finition/segment) — display-only,
     // doesn't rewrite the DB row, so a real re-import is still the full fix.
     const by={}; vs.forEach(v=>{ by[v.id]={id:v.id,marque:cleanBrand(v.marque),modele:cleanText(v.modele),motor:cleanText(v.motor)||'',finition:cleanText(v.finition)||'',segment:cleanText(v.segment)||'Divers',type:v.type||'Thermique',fi:v.fi||FI_DEFAULT,catalogue:Number(v.catalogue)||0,role:v.vrole||'client',comment:cleanText(v.comment)||'',statutOverride:v.status_override||undefined,months:{}}; });
-    md.forEach(m=>{ const v=by[m.vehicle_id]; if(!v)return; const key=String(m.period).slice(0,7); const o={showroom:Number(m.showroom)}; if(m.remise!=null)o.remise=Number(m.remise); if(m.cem_obs!=null)o.cemObs=Number(m.cem_obs); v.months[key]=o; });
+    md.forEach(m=>{ const v=by[m.vehicle_id]; if(!v)return; const key=String(m.period).slice(0,7); const o={showroom:Number(m.showroom)}; if(m.remise!=null)o.remise=Number(m.remise); if(m.cem_obs!=null)o.cemObs=Number(m.cem_obs); if(m.comment)o.comment=cleanText(m.comment); v.months[key]=o; });
     return Object.values(by);
   },
   async hydrate(uid){
@@ -2312,7 +2313,7 @@ const Store = {
         {org:this.org,marque:r.marque,modele:r.modele,motor:r.motor,finition:r.finition,segment:r.segment,type:r.type,fi:r.fi,catalogue:r.showroom,vrole:'client',comment:r.comment},
         {onConflict:'org,marque,modele,finition'}).select().single();
       if(v) await this.sb.from('monthly_data').upsert(
-        {vehicle_id:v.id,period:period+'-01',showroom:r.showroom,cem_obs:r.cemObs},
+        {vehicle_id:v.id,period:period+'-01',showroom:r.showroom,cem_obs:r.cemObs,comment:r.comment||null},
         {onConflict:'vehicle_id,period'});
     }
   },
@@ -2333,7 +2334,7 @@ const Store = {
         v=data; cache[key]=v;
       }
       const {error:e2}=await this.sb.from('monthly_data').upsert(
-        {vehicle_id:v.id,period:r.period+'-01',showroom:r.showroom,cem_obs:r.cemObs,remise:r.remise},
+        {vehicle_id:v.id,period:r.period+'-01',showroom:r.showroom,cem_obs:r.cemObs,remise:r.remise,comment:r.comment||null},
         {onConflict:'vehicle_id,period'});
       if(e2)throw e2;
     }
@@ -2833,6 +2834,9 @@ function parseQuantSheets(wb){
       const d={showroom:show};
       if(cem!=null&&cem>0)d.cemObs=cem;
       else if(rem!=null)d.remise=rem;                            // remise-only rows still belong in the tables
+      // the analyst's note is written per month, not per vehicle — keep it on
+      // the month so each month's analysis shows the note it was written with
+      if(ix.com>=0&&cleanText(r[ix.com]))d.comment=cleanText(r[ix.com]);
       rec.periods[period]=d;
     }
   });
@@ -3008,6 +3012,7 @@ function applyUpload(recs,period){
     let v=VEHICLES.find(x=>norm(x.marque)===norm(r.marque)&&norm(x.modele)===norm(r.modele)&&norm(x.finition)===norm(r.finition));
     const md={showroom:r.showroom,cemObs:r.cemObs};
     if(r.cemObs==null&&r.remise!=null)md.remise=r.remise;   // remise-only month: keep it computable
+    if(r.comment)md.comment=r.comment;                      // note belongs to the month it was written for
     if(v){v.months[period]=md;if(r.comment)v.comment=r.comment;
       // real monthly files never carry Type, and FI only when the Ref Segment&FI join found it —
       // don't stomp existing catalog values (EV/hybrid flags, custom FI) with fallback defaults.
@@ -3061,7 +3066,7 @@ function versionsToRecs(versions,period){
   versions.forEach(v=>{
     const d=v.periods[period]; if(!d)return;
     recs.push({marque:v.marque,modele:v.modele,motor:v.motor,finition:v.finition,segment:v.segment,
-      type:v.type,typeProvided:true,fi:v.fi,fiProvided:true,role:v.role,showroom:d.showroom,cemObs:d.cemObs,remise:d.remise,comment:v.comment||''});
+      type:v.type,typeProvided:true,fi:v.fi,fiProvided:true,role:v.role,showroom:d.showroom,cemObs:d.cemObs,remise:d.remise,comment:d.comment||''});
   });
   return recs;
 }
@@ -3121,7 +3126,7 @@ async function publishHistoryImport(){
     try{
       const recs=[];
       versions.forEach(v=>Object.keys(v.periods).forEach(period=>{ const d=v.periods[period];
-        recs.push({marque:v.marque,modele:v.modele,motor:v.motor,finition:v.finition,segment:v.segment,type:v.type,fi:v.fi,role:v.role,period,showroom:d.showroom,cemObs:d.cemObs,remise:d.remise}); }));
+        recs.push({marque:v.marque,modele:v.modele,motor:v.motor,finition:v.finition,segment:v.segment,type:v.type,fi:v.fi,role:v.role,period,showroom:d.showroom,cemObs:d.cemObs,remise:d.remise,comment:d.comment||''}); }));
       await Store.bulkImportHistory(recs);
       for(const p of periods) await Store.upsertMonth(p,cycleRow(p).status,{});
       const u=await Store.getUser(); await Store.hydrate(u.id);
@@ -3508,7 +3513,7 @@ function renderIntegration(){
       <td>${esc(v.finition)}</td>
       <td class="num"><input class="field" style="width:120px;text-align:right" id="intgShow_${v.id}" value="${d.showroom??''}" oninput="refreshIntegrationRow('${v.id}')"></td>
       <td class="num"><input class="field" style="width:120px;text-align:right" id="intgCem_${v.id}" value="${d.cemObs??''}" oninput="refreshIntegrationRow('${v.id}')"></td>
-      <td><input class="field" style="width:160px" id="intgCom_${v.id}" value="${esc(v.comment||'')}"></td>
+      <td><input class="field" style="width:160px" id="intgCom_${v.id}" value="${esc(d.comment||'')}"></td>
       <td id="intgAlert_${v.id}"></td>
       <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="openProof('${v.id}','catalogue')">Catalogue</button> <button class="btn btn-ghost btn-sm" onclick="openProof('${v.id}','proforma')">Devis</button></td>
     </tr>`;

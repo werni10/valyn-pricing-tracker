@@ -52,9 +52,12 @@ create table if not exists public.monthly_data (
   showroom   numeric,                                 -- prix showroom TTC
   remise     numeric,                                 -- optional stored discount (0..1)
   cem_obs    numeric,                                 -- observed CEM (used to back-solve remise)
+  comment    text,                                    -- analyst note for THAT month (per-month, not per-vehicle)
   created_at timestamptz not null default now(),
   unique (vehicle_id, period)
 );
+-- existing databases: add the per-month comment column in place
+alter table public.monthly_data add column if not exists comment text;
 
 -- ---------- broadcasts (alerts / messages admin -> client) ----------
 create table if not exists public.broadcasts (
