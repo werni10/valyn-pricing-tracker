@@ -1746,27 +1746,41 @@ function histRows(){
 function renderHistory(){
   if(!document.getElementById('histBodyPub')) return;
   const rows=histRows();
-  const head='<tr><th>Segment</th><th>Finition</th>'+MONTHS.map(m=>`<th class="num">${esc(MLABEL[m]||m)}</th>`).join('')+'</tr>';
+  // Same shape as the workbook: one "Segment / Version" column, segments as
+  // group header rows, versions listed under them by full name, months across.
+  const head='<tr><th style="min-width:280px">Segment<br><span style="font-weight:400;padding-left:14px">Version</span></th>'+MONTHS.map(m=>`<th class="num">${esc(MLABEL[m]||m)}</th>`).join('')+'</tr>';
   ['Pub','Rem','Cem'].forEach(k=>{ const h=document.getElementById('histHead'+k); if(h) h.innerHTML=head; });
-  const label=rows.length+' finition(s) · '+MONTHS.length+' mois';
+  const label=rows.length+' version(s) · '+MONTHS.length+' mois';
   ['Pub','Rem','Cem'].forEach(k=>{ const c=document.getElementById('histCount'+k); if(c) c.innerText=label; });
-  const colspan=MONTHS.length+2;
+  const colspan=MONTHS.length+1;
   const empty=`<tr><td colspan="${colspan}" class="empty-note">Aucun résultat pour ces filtres.</td></tr>`;
 
   const cells=(v,pick)=>MONTHS.map(m=>{
     const x=vehMonth(v,m);
-    if(!x) return '<td class="num">—</td>';
-    return `<td class="num">${pick(x)}</td>`;
+    return `<td class="num">${x?pick(x):'—'}</td>`;
   }).join('');
-  const name=v=>`<td>${esc(v.segment)}</td><td><strong>${esc(v.marque)} ${esc(v.modele)}</strong><br><span style="color:var(--muted);font-size:11px">${esc(v.finition)}</span></td>`;
+  // Rebuild the workbook's Key_Version label. The " — motor" suffix added to
+  // finition is an identity tie-breaker, not part of the name — drop it here so
+  // the motorisation isn't printed twice.
+  const fullName=v=>[v.marque,v.modele,v.motor,String(v.finition||'').split(' — ')[0]].filter(Boolean).join(' ');
+  const segHead=seg=>`<tr><td colspan="${colspan}" style="background:#f1f5f9;font-weight:900">${esc(seg)}</td></tr>`;
 
-  document.getElementById('histBodyPub').innerHTML=rows.map(v=>
-    `<tr>${name(v)}${cells(v,x=>fmt(x.showroom))}</tr>`).join('')||empty;
-  document.getElementById('histBodyRem').innerHTML=rows.map(v=>
-    `<tr>${name(v)}${cells(v,x=>x.e?fmtP(x.e.remise):'—')}</tr>`).join('')||empty;
-  document.getElementById('histBodyCem').innerHTML=rows.map(v=>
-    `<tr class="clk" tabindex="0" role="button" aria-label="Dérouler l'historique de ${esc(v.modele)} ${esc(v.finition)}" onclick="toggleHistRow('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleHistRow('${v.id}')}">${name(v)}${cells(v,x=>x.e?fmt(x.e.CEM):'—')}</tr>
-     <tr id="histExpand-${v.id}" style="display:none"><td colspan="${colspan}" id="histExpandBody-${v.id}"></td></tr>`).join('')||empty;
+  // group in the order histRows() already sorted them (segment, then name)
+  const groups=[];
+  rows.forEach(v=>{
+    const g=groups[groups.length-1];
+    if(g&&g.seg===v.segment) g.items.push(v); else groups.push({seg:v.segment,items:[v]});
+  });
+  const build=(pick,clickable)=>groups.map(g=>segHead(g.seg)+g.items.map(v=>{
+    const nameCell=`<td style="padding-left:18px">${esc(fullName(v))}</td>`;
+    if(!clickable) return `<tr>${nameCell}${cells(v,pick)}</tr>`;
+    return `<tr class="clk" tabindex="0" role="button" aria-label="Dérouler l'historique de ${esc(fullName(v))}" onclick="toggleHistRow('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleHistRow('${v.id}')}">${nameCell}${cells(v,pick)}</tr>
+      <tr id="histExpand-${v.id}" style="display:none"><td colspan="${colspan}" id="histExpandBody-${v.id}"></td></tr>`;
+  }).join('')).join('')||empty;
+
+  document.getElementById('histBodyPub').innerHTML=build(x=>fmt(x.showroom),false);
+  document.getElementById('histBodyRem').innerHTML=build(x=>x.e?fmtP(x.e.remise):'—',false);
+  document.getElementById('histBodyCem').innerHTML=build(x=>x.e?fmt(x.e.CEM):'—',true);
 }
 function exportHistoryCSV(){
   const rows=histRows();
@@ -2308,6 +2322,18 @@ const Store = {
   async persistAccount(a){ if(!this.sb)return; await this.sb.from('profiles').update({name:a.name,org:a.org,role:a.role,active:a.active,rights:a.rights}).eq('id',a.id); },
   async pushBroadcast(b){ if(!this.sb)return null; const {data}=await this.sb.from('broadcasts').insert({org:this.org,title:b.title,body:b.body,priority:b.priority,kind:b.kind||'alert',from_name:'Valyn Advisory',created_by:(SESSION&&SESSION.id)||null}).select().single(); return data; },
   async markRead(uid,ids){ if(!this.sb||!ids.length)return; await this.sb.from('reads').upsert(ids.map(id=>({user_id:uid,broadcast_id:id})),{onConflict:'user_id,broadcast_id'}); },
+  // monthly_data.comment is a newer column. Rather than make every import depend
+  // on the operator having run the migration first (a failed upsert there wipes
+  // out the whole import), write it optimistically and retry without it if the
+  // database predates the column.
+  async _putMonthly(row){
+    let {error}=await this.sb.from('monthly_data').upsert(row,{onConflict:'vehicle_id,period'});
+    if(error&&/comment/i.test(error.message||'')){
+      const rest=Object.assign({},row); delete rest.comment;
+      ({error}=await this.sb.from('monthly_data').upsert(rest,{onConflict:'vehicle_id,period'}));
+    }
+    if(error)throw error;
+  },
   async upsertMonthly(recs,period){
     if(!this.sb)return;
     period=period||CURRENT;
@@ -2315,9 +2341,7 @@ const Store = {
       const {data:v} = await this.sb.from('vehicles').upsert(
         {org:this.org,marque:r.marque,modele:r.modele,motor:r.motor,finition:r.finition,segment:r.segment,type:r.type,fi:r.fi,catalogue:r.showroom,vrole:'client',comment:r.comment},
         {onConflict:'org,marque,modele,finition'}).select().single();
-      if(v) await this.sb.from('monthly_data').upsert(
-        {vehicle_id:v.id,period:period+'-01',showroom:r.showroom,cem_obs:r.cemObs,comment:r.comment||null},
-        {onConflict:'vehicle_id,period'});
+      if(v) await this._putMonthly({vehicle_id:v.id,period:period+'-01',showroom:r.showroom,cem_obs:r.cemObs,comment:r.comment||null});
     }
   },
   // One-time historical seed (Dec25→Jun26): one record per (vehicle, period).
@@ -2336,10 +2360,7 @@ const Store = {
         if(error)throw error;
         v=data; cache[key]=v;
       }
-      const {error:e2}=await this.sb.from('monthly_data').upsert(
-        {vehicle_id:v.id,period:r.period+'-01',showroom:r.showroom,cem_obs:r.cemObs,remise:r.remise,comment:r.comment||null},
-        {onConflict:'vehicle_id,period'});
-      if(e2)throw e2;
+      await this._putMonthly({vehicle_id:v.id,period:r.period+'-01',showroom:r.showroom,cem_obs:r.cemObs,remise:r.remise,comment:r.comment||null});
     }
   },
   async upsertMonth(period,status,extra){
@@ -2791,6 +2812,10 @@ function guessImportedType(marque,fullName){
 function parseQuantSheets(wb){
   const out={};                       // key -> version record
   const periods=[];
+  // "Ref Segment&FI" is the workbook's canonical Key_Version -> segment/FI table.
+  // Prefer it over the per-month sheets, whose segment naming drifted over time
+  // (Déc 25 still says "Berline"/"Compacte" where later months say "Executive").
+  const refMap=buildKeyVersionMap(wb)||{};
   wb.SheetNames.filter(n=>/^analyse\s*quantitative/i.test(n)).forEach(sn=>{
     const period=sheetNameToPeriod(sn); if(!period)return;
     const aoa=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});
@@ -2827,12 +2852,21 @@ function parseQuantSheets(wb){
         segment:ix.seg>=0?cleanText(r[ix.seg]||''):'',type:ix.type>=0?cleanText(r[ix.type]||''):'',
         fi:ix.fi>=0?parseNum(r[ix.fi]):null,catalogue:ix.cat>=0?parseNum(r[ix.cat]):null,
         comment:'',role:'client',periods:{}});
-      // later months win for descriptive fields — they reflect the current state
-      if(ix.seg>=0&&cleanText(r[ix.seg]))rec.segment=cleanText(r[ix.seg]);
-      if(ix.type>=0&&cleanText(r[ix.type]))rec.type=cleanText(r[ix.type]);
-      if(ix.fi>=0&&parseNum(r[ix.fi])!=null)rec.fi=parseNum(r[ix.fi]);
-      if(ix.cat>=0&&parseNum(r[ix.cat])!=null)rec.catalogue=parseNum(r[ix.cat]);
-      if(ix.com>=0&&cleanText(r[ix.com]))rec.comment=cleanText(r[ix.com]);
+      // Later months win for descriptive fields (segment naming was revised over
+      // time — Déc 25 says "Berline"/"Compacte", later months "Compactes
+      // Hatchback"). Compare periods explicitly: SheetNames order is NOT
+      // chronological, so "last sheet processed" would let Déc 25 win.
+      const ref=refMap[norm(kv)];
+      if(ref&&ref.segment){ rec.segment=ref.segment; rec._refSeg=true; }   // canonical, wins over any month
+      if(ref&&ref.fi!=null)rec.fi=ref.fi;
+      if(!rec._desc||period>rec._desc){
+        rec._desc=period;
+        if(!(ref&&ref.segment)&&ix.seg>=0&&cleanText(r[ix.seg]))rec.segment=cleanText(r[ix.seg]);
+        if(ix.type>=0&&cleanText(r[ix.type]))rec.type=cleanText(r[ix.type]);
+        if(!(ref&&ref.fi!=null)&&ix.fi>=0&&parseNum(r[ix.fi])!=null)rec.fi=parseNum(r[ix.fi]);
+        if(ix.cat>=0&&parseNum(r[ix.cat])!=null)rec.catalogue=parseNum(r[ix.cat]);
+        if(ix.com>=0&&cleanText(r[ix.com]))rec.comment=cleanText(r[ix.com]);
+      }
       if(show==null)continue;                                    // no price this month => not tracked then
       const d={showroom:show};
       if(cem!=null&&cem>0)d.cemObs=cem;
@@ -2844,6 +2878,13 @@ function parseQuantSheets(wb){
     }
   });
   const list=Object.values(out).filter(v=>Object.keys(v.periods).length);
+  // Versions that only ever appeared in Déc 25 aren't in Ref Segment&FI, so they
+  // keep that sheet's older segment wording ("Berline", "Compacte"). Those names
+  // don't map 1:1 onto the current ones, but a sibling of the same marque+modèle
+  // usually is in the reference — adopt its segment so the tables group cleanly.
+  const canon={};
+  list.forEach(v=>{ if(v._refSeg) canon[norm(v.marque)+'|'+norm(v.modele)]=v.segment; });
+  list.forEach(v=>{ if(!v._refSeg){ const c=canon[norm(v.marque)+'|'+norm(v.modele)]; if(c) v.segment=c; } });
   list.forEach(v=>{
     if(!v.segment)v.segment='Divers';
     if(!v.type)v.type=guessImportedType(v.marque,v.name);
