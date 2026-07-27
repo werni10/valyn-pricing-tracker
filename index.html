@@ -458,23 +458,29 @@
     <!-- HISTORY -->
     <section class="page" id="history">
       <div class="card">
-        <div class="section-head"><div><h3>Analyse historique par finition</h3><p>Évolution mensuelle calculée (prix showroom, remise, prix CEM). Cliquez sur une ligne pour dérouler le graphique.</p></div></div>
+        <div class="section-head"><div><h3>Analyse historique</h3><p>Évolution mois par mois, sur toute la période disponible — même structure que le fichier maître : prix public, remises, prix remisés.</p></div></div>
         <div class="filters">
           <input class="field search" id="histSearch" placeholder="Rechercher marque, modèle, finition..." oninput="renderHistory()">
           <select class="field" id="histBrand" onchange="renderHistory()"><option value="">Toutes marques</option></select>
+          <select class="field" id="histSeg" onchange="renderHistory()"><option value="">Tous segments</option></select>
+          <select class="field" id="histScope" onchange="renderHistory()">
+            <option value="client">Périmètre suivi</option>
+            <option value="all">Tout (avec références concurrentes)</option>
+          </select>
+          <button class="btn btn-light" onclick="exportHistoryCSV()">⇩ Export CSV</button>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr>
-              <th>Finition</th>
-              <th class="num" id="histTh1a">Showroom</th><th class="num" id="histTh1b">Showroom</th>
-              <th class="num" id="histTh2a">Remise</th><th class="num" id="histTh2b">Remise</th>
-              <th class="num" id="histTh3a">Prix CEM</th><th class="num" id="histTh3b">Prix CEM</th>
-              <th>Évolution</th>
-            </tr></thead>
-            <tbody id="histBody"></tbody>
-          </table>
-        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="section-head"><div><h3>Prix public</h3><p>Prix showroom TTC par mois.</p></div><span class="chip chip-muted" id="histCountPub">—</span></div>
+        <div class="table-wrap"><table><thead id="histHeadPub"></thead><tbody id="histBodyPub"></tbody></table></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="section-head"><div><h3>Remises</h3><p>Remise totale en % par mois.</p></div><span class="chip chip-muted" id="histCountRem">—</span></div>
+        <div class="table-wrap"><table><thead id="histHeadRem"></thead><tbody id="histBodyRem"></tbody></table></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="section-head"><div><h3>Prix remisés</h3><p>Prix clé en main (CEM) TTC par mois.</p></div><span class="chip chip-muted" id="histCountCem">—</span></div>
+        <div class="table-wrap"><table><thead id="histHeadCem"></thead><tbody id="histBodyCem"></tbody></table></div>
       </div>
     </section>
 
@@ -1703,43 +1709,74 @@ function breakdownHTML(e){
 /* ================= HISTORY PAGE ================= */
 function fillHistFilters(){
   const sel=document.getElementById('histBrand'); if(!sel) return;
-  const brands=[...new Set(VEHICLES.filter(v=>v.role!=='catalog'&&Object.keys(v.months).length>1).map(v=>v.marque))].sort();
+  const pool=histPool();
+  const brands=[...new Set(pool.map(v=>v.marque))].sort();
   const prev=sel.value;
   sel.innerHTML='<option value="">Toutes marques</option>'+brands.map(b=>`<option>${esc(b)}</option>`).join('');
   sel.value=brands.includes(prev)?prev:'';
+  const ss=document.getElementById('histSeg');
+  if(ss){ const segs=[...new Set(pool.map(v=>v.segment))].sort(); const p=ss.value;
+    ss.innerHTML='<option value="">Tous segments</option>'+segs.map(s=>`<option>${esc(s)}</option>`).join('');
+    ss.value=segs.includes(p)?p:''; }
 }
-function renderHistory(){
-  const body=document.getElementById('histBody'); if(!body) return;
-  const first=MONTHS[0], last=CURRENT;
-  const fl=MLABEL[first]||first, ll=MLABEL[last]||last;
-  ['1','2','3'].forEach((n,i)=>{
-    const suffix=['Showroom','Remise','Prix CEM'][i];
-    const a=document.getElementById('histTh'+n+'a'), b=document.getElementById('histTh'+n+'b');
-    if(a) a.innerText=fl+' '+suffix; if(b) b.innerText=ll+' '+suffix;
-  });
+// Every finition that has at least one month of data — a version tracked for a
+// single month still belongs in the history (that's real data, not noise).
+function histPool(){
+  const all=(document.getElementById('histScope')?.value||'client')==='all';
+  return VEHICLES.filter(v=>Object.keys(v.months).length&&(all||v.role!=='catalog'));
+}
+function histRows(){
   const q=(document.getElementById('histSearch')?.value||'').toLowerCase();
   const brand=document.getElementById('histBrand')?.value||'';
-  const rows=VEHICLES.filter(v=>v.role!=='catalog'&&Object.keys(v.months).length>1).filter(v=>{
+  const seg=document.getElementById('histSeg')?.value||'';
+  return histPool().filter(v=>{
     if(brand&&v.marque!==brand) return false;
-    if(q&&!(`${v.marque} ${v.modele} ${v.finition}`.toLowerCase().includes(q))) return false;
+    if(seg&&v.segment!==seg) return false;
+    if(q&&!(`${v.marque} ${v.modele} ${v.finition} ${v.segment}`.toLowerCase().includes(q))) return false;
     return true;
+  }).sort((a,b)=>(a.segment+a.marque+a.modele+a.finition).localeCompare(b.segment+b.marque+b.modele+b.finition));
+}
+// Three stacked tables mirroring the master workbook's "PRICE INDEX EVOLUTION"
+// layout — prix public / remises / prix remisés — each spanning every month
+// held for the org, so nothing is hidden behind a first-vs-last comparison.
+function renderHistory(){
+  if(!document.getElementById('histBodyPub')) return;
+  const rows=histRows();
+  const head='<tr><th>Segment</th><th>Finition</th>'+MONTHS.map(m=>`<th class="num">${esc(MLABEL[m]||m)}</th>`).join('')+'</tr>';
+  ['Pub','Rem','Cem'].forEach(k=>{ const h=document.getElementById('histHead'+k); if(h) h.innerHTML=head; });
+  const label=rows.length+' finition(s) · '+MONTHS.length+' mois';
+  ['Pub','Rem','Cem'].forEach(k=>{ const c=document.getElementById('histCount'+k); if(c) c.innerText=label; });
+  const colspan=MONTHS.length+2;
+  const empty=`<tr><td colspan="${colspan}" class="empty-note">Aucun résultat pour ces filtres.</td></tr>`;
+
+  const cells=(v,pick)=>MONTHS.map(m=>{
+    const x=vehMonth(v,m);
+    if(!x) return '<td class="num">—</td>';
+    return `<td class="num">${pick(x)}</td>`;
+  }).join('');
+  const name=v=>`<td>${esc(v.segment)}</td><td><strong>${esc(v.marque)} ${esc(v.modele)}</strong><br><span style="color:var(--muted);font-size:11px">${esc(v.finition)}</span></td>`;
+
+  document.getElementById('histBodyPub').innerHTML=rows.map(v=>
+    `<tr>${name(v)}${cells(v,x=>fmt(x.showroom))}</tr>`).join('')||empty;
+  document.getElementById('histBodyRem').innerHTML=rows.map(v=>
+    `<tr>${name(v)}${cells(v,x=>x.e?fmtP(x.e.remise):'—')}</tr>`).join('')||empty;
+  document.getElementById('histBodyCem').innerHTML=rows.map(v=>
+    `<tr class="clk" tabindex="0" role="button" aria-label="Dérouler l'historique de ${esc(v.modele)} ${esc(v.finition)}" onclick="toggleHistRow('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleHistRow('${v.id}')}">${name(v)}${cells(v,x=>x.e?fmt(x.e.CEM):'—')}</tr>
+     <tr id="histExpand-${v.id}" style="display:none"><td colspan="${colspan}" id="histExpandBody-${v.id}"></td></tr>`).join('')||empty;
+}
+function exportHistoryCSV(){
+  const rows=histRows();
+  const out=[];
+  [['Prix public (showroom TTC)',x=>x.showroom==null?'':Math.round(x.showroom)],
+   ['Remises (%)',x=>x.e?(x.e.remise*100).toFixed(2):''],
+   ['Prix remises (CEM TTC)',x=>x.e?Math.round(x.e.CEM):'']].forEach(([title,pick])=>{
+    out.push([title]);
+    out.push(['Segment','Marque','Modele','Finition',...MONTHS.map(m=>MLABEL[m]||m)]);
+    rows.forEach(v=>out.push([v.segment,v.marque,v.modele,v.finition,...MONTHS.map(m=>{const x=vehMonth(v,m);return x?pick(x):'';})]));
+    out.push([]);
   });
-  body.innerHTML=rows.map(v=>{
-    const mf=vehMonth(v,first), ml=vehMonth(v,last);
-    const ef=mf&&mf.e, el=ml&&ml.e;
-    const dCem=(ef&&el&&ef.CEM)?((el.CEM-ef.CEM)/ef.CEM):0;
-    const dShow=(ef&&el&&ef.pvpTTC)?((el.pvpTTC-ef.pvpTTC)/ef.pvpTTC):0;
-    const dRem=(ef&&el)?(el.remise-ef.remise):0;
-    const tg=(ef&&el)?tag(dCem,dShow,dRem):{t:'Historique insuffisant',c:'chip-muted'};
-    return `<tr class="clk" tabindex="0" role="button" aria-label="Dérouler l'historique de ${esc(v.modele)} ${esc(v.finition)}" onclick="toggleHistRow('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleHistRow('${v.id}')}">
-      <td><strong>${esc(v.marque)} ${esc(v.modele)} ${esc(v.finition)}</strong></td>
-      <td class="num">${ef?fmt(ef.pvpTTC):'—'}</td><td class="num">${el?fmt(el.pvpTTC):'—'}</td>
-      <td class="num">${ef?fmtP(ef.remise):'—'}</td><td class="num">${el?fmtP(el.remise):'—'}</td>
-      <td class="num">${ef?fmt(ef.CEM):'—'}</td><td class="num">${el?fmt(el.CEM):'—'}</td>
-      <td><span class="chip ${tg.c}">${tg.t}</span></td>
-    </tr>
-    <tr id="histExpand-${v.id}" style="display:none"><td colspan="8" id="histExpandBody-${v.id}"></td></tr>`;
-  }).join('')||'<tr><td colspan="8" class="empty-note">Aucun résultat pour ces filtres.</td></tr>';
+  download(`AutoNejma_Historique_${MONTHS[0]}_${MONTHS[MONTHS.length-1]}.csv`,out.map(r=>r.map(csvCell).join(';')).join('\n'));
+  showToast('Historique complet téléchargé');
 }
 function toggleHistRow(id){
   const row=document.getElementById('histExpand-'+id); if(!row) return;
