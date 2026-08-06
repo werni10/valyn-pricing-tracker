@@ -234,18 +234,79 @@
   .tax-table>div{padding:9px 13px;border-bottom:1px solid #f0f2f6}
   .tax-table>div:nth-child(2n){text-align:right;font-weight:900;font-variant-numeric:tabular-nums}
   /* auth + rights + upload */
-  .login-gate{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:20px;
-    background:radial-gradient(circle at 20% 15%,rgba(239,201,0,.25),transparent 40%),linear-gradient(180deg,#080b11,#111827)}
+  @keyframes loginRise{from{opacity:0;transform:translateY(20px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+  @keyframes loginFade{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes loginOrb{0%{transform:translate(0,0) scale(1)}100%{transform:translate(55px,70px) scale(1.15)}}
+  @keyframes loginSheen{0%{transform:translateX(-130%) rotate(8deg)}100%{transform:translateX(230%) rotate(8deg)}}
+  .login-gate{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:20px;overflow:hidden;
+    background:
+      radial-gradient(circle at 18% 12%,rgba(239,201,0,.22),transparent 38%),
+      radial-gradient(circle at 88% 92%,rgba(124,58,237,.10),transparent 42%),
+      linear-gradient(165deg,#05070c 0%,#0d1119 55%,#111827 100%)}
   .login-gate.hidden{display:none}
-  .login-card{width:min(460px,94vw);background:white;border-radius:26px;padding:26px;box-shadow:0 40px 100px rgba(0,0,0,.4)}
-  .login-list{display:grid;gap:10px;margin-top:6px}
-  .login-item{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:16px;padding:12px 14px;cursor:pointer;transition:.15s;background:#fff;text-align:left;width:100%}
-  .login-item:hover{border-color:var(--orange);background:#fff8f1;transform:translateY(-1px)}
-  .login-item .av{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;font-weight:900;color:white}
-  .login-item b{display:block;font-size:14px}
-  .login-item span{display:block;font-size:12px;color:var(--muted)}
-  .login-role{margin-left:auto;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;padding:4px 9px;border-radius:99px}
-  .role-admin{background:#111827;color:white}.role-client{background:#e0f2fe;color:#075985}
+  .login-gate::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.05;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
+  .login-gate::after{content:"";position:absolute;z-index:0;width:520px;height:520px;border-radius:50%;top:-180px;left:-140px;
+    background:radial-gradient(circle,rgba(239,201,0,.32),transparent 70%);filter:blur(30px);pointer-events:none;
+    animation:loginOrb 20s ease-in-out infinite alternate}
+  .login-card{position:relative;z-index:1;width:min(440px,92vw);background:linear-gradient(180deg,#ffffff 0%,#fcfbf7 100%);
+    border-radius:28px;padding:34px 32px 26px;
+    box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 40px 100px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.05);
+    animation:loginRise .6s cubic-bezier(.16,1,.3,1) both}
+  .login-card>*{animation:loginFade .55s cubic-bezier(.16,1,.3,1) both}
+  .login-card>*:nth-child(1){animation-delay:.08s}
+  .login-card>*:nth-child(2){animation-delay:.15s}
+  .login-card>*:nth-child(3){animation-delay:.21s}
+  .login-card>*:nth-child(4){animation-delay:.27s}
+  .login-card>*:nth-child(5){animation-delay:.33s}
+  .login-brand{display:flex;gap:14px;align-items:center;margin-bottom:14px}
+  .login-mark{position:relative;overflow:hidden}
+  .login-mark::after{content:"";position:absolute;top:-50%;left:-60%;width:40%;height:200%;
+    background:linear-gradient(115deg,transparent,rgba(255,255,255,.8),transparent);
+    transform:translateX(-130%) rotate(8deg);animation:loginSheen 1.3s .55s ease-out 1}
+  .login-brand-text h1{margin:0;font-size:19px;letter-spacing:-.03em;color:#0b0f17;font-weight:800}
+  .login-brand-text p{margin:4px 0 0;font-size:12.5px;color:var(--muted);font-weight:650}
+  .login-divider{height:1px;background:linear-gradient(90deg,transparent,var(--line) 18%,var(--line) 82%,transparent);margin:0 0 16px}
+  .login-instruct{color:var(--muted);font-size:13px;margin:0 0 12px;font-weight:600;line-height:1.5}
+  .login-list{display:grid;gap:10px;margin-top:2px}
+  .login-group+.login-group{margin-top:16px}
+  .login-group-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#a58a12;font-weight:850;
+    margin:0 2px 8px;display:flex;align-items:center;gap:8px}
+  .login-group-label::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(165,138,18,.28),transparent)}
+  .login-item{display:flex;align-items:center;gap:12px;border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;
+    cursor:pointer;transition:.18s cubic-bezier(.2,.8,.2,1);background:#fff;text-align:left;width:100%}
+  .login-item:hover{border-color:var(--orange);background:#fffaf0;transform:translateY(-2px);box-shadow:0 10px 24px rgba(239,201,0,.16)}
+  .login-item:active{transform:translateY(0)}
+  .login-item .av{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;font-weight:900;color:white;
+    box-shadow:0 6px 14px rgba(0,0,0,.18);flex:0 0 auto}
+  .login-item b{display:block;font-size:14px;letter-spacing:-.01em}
+  .login-item span{display:block;font-size:12px;color:var(--muted);margin-top:1px}
+  .login-role{margin-left:auto;font-size:9.5px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;
+    padding:5px 10px;border-radius:99px;white-space:nowrap;flex:0 0 auto}
+  .role-admin{background:#111827;color:#f5e08a}.role-client{background:#e0f2fe;color:#075985}
+  .login-form{display:grid;gap:10px;margin-top:2px}
+  .login-field{display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);border-radius:15px;
+    padding:12px 14px;background:#fbfbfc;transition:.18s ease}
+  .login-field:focus-within{border-color:var(--orange);background:#fff;box-shadow:0 0 0 4px rgba(239,201,0,.14)}
+  .login-field-icon{width:19px;height:19px;flex:0 0 auto;color:#9aa3b2;transition:.18s ease}
+  .login-field:focus-within .login-field-icon{color:var(--focus)}
+  .login-input{border:0;outline:0;background:transparent;flex:1;min-width:0;font:inherit;font-size:14.5px;font-weight:700;color:var(--ink)}
+  .login-input::placeholder{color:#a7aebb;font-weight:600}
+  .login-submit{width:100%;justify-content:center;display:flex;align-items:center;gap:9px;
+    background:linear-gradient(135deg,#111827,#0b0f17);color:#fff;border:0;border-radius:15px;
+    padding:13px 16px;font-weight:850;font-size:14px;cursor:pointer;margin-top:2px;font-family:inherit;
+    box-shadow:0 14px 30px rgba(11,15,23,.28);transition:.2s ease}
+  .login-submit:hover{transform:translateY(-1px);box-shadow:0 18px 38px rgba(11,15,23,.35)}
+  .login-submit:active{transform:translateY(0)}
+  .login-submit-arrow{width:16px;height:16px;transition:.2s ease}
+  .login-submit:hover .login-submit-arrow{transform:translateX(3px);color:var(--orange)}
+  .login-error{color:var(--red);font-size:12.5px;font-weight:800;min-height:16px}
+  .login-footnote{display:flex;align-items:center;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line);
+    color:#8a93a3;font-size:11.5px;font-weight:650;line-height:1.5}
+  .login-footnote svg{width:14px;height:14px;flex:0 0 auto;color:#b7bec9}
+  @media (prefers-reduced-motion:reduce){
+    .login-card,.login-card>*,.login-mark::after,.login-gate::after{animation:none!important}
+  }
   .bell{position:relative;width:44px;height:44px;border-radius:15px;border:1px solid var(--line);background:white;cursor:pointer;font-size:18px;box-shadow:var(--shadow-card)}
   .bell-badge{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;border-radius:99px;background:var(--red);color:white;font-size:11px;font-weight:900;display:grid;place-items:center;padding:0 5px}
   .profile-menu{position:absolute;top:64px;right:0;background:white;border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-soft);padding:8px;min-width:220px;display:none;z-index:70}
@@ -283,13 +344,20 @@
 <!-- LOGIN GATE -->
 <div class="login-gate" id="loginGate">
   <div class="login-card">
-    <div class="brand" style="border:0;padding:0;margin:0 0 6px">
-      <div class="brand-mark">V</div>
-      <div><h1 style="color:#0b0f17">Valyn Advisory</h1><p style="color:var(--muted)">Auto Pricing Intelligence — accès plateforme</p></div>
+    <div class="login-brand">
+      <div class="brand-mark login-mark">V</div>
+      <div class="login-brand-text">
+        <h1>Valyn Advisory</h1>
+        <p>Auto Pricing Intelligence — accès plateforme</p>
+      </div>
     </div>
-    <p style="color:var(--muted);font-size:13px;margin:0 0 6px">Sélectionnez votre profil (authentification SSO simulée).</p>
+    <div class="login-divider"></div>
+    <p class="login-instruct" id="loginInstruct">Sélectionnez votre profil pour accéder à la plateforme.</p>
     <div id="loginList"></div>
-    <p style="color:#9aa3b2;font-size:11.5px;margin:10px 2px 0">🔒 Démo : aucun mot de passe traité. En production, connexion SSO/mot de passe côté serveur.</p>
+    <div class="login-footnote">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>
+      <span id="loginFootnoteText">Connexion chiffrée — vos identifiants restent confidentiels.</span>
+    </div>
   </div>
 </div>
 
@@ -2596,21 +2664,48 @@ function saveAccounts(){save(LS.acc,ACCOUNTS);}
 /* ---- login gate ---- */
 function renderLogin(){
   const box=document.getElementById('loginList');
+  const instruct=document.getElementById('loginInstruct');
+  const footnote=document.getElementById('loginFootnoteText');
   if(Store.LIVE){
+    if(instruct) instruct.textContent='Connectez-vous avec vos identifiants pour accéder à la plateforme.';
+    if(footnote) footnote.textContent='Connexion sécurisée — vos identifiants ne sont jamais stockés en clair.';
     box.innerHTML=`
-      <div style="display:grid;gap:10px;margin-top:6px">
-        <input class="field" id="liEmail" style="width:100%" placeholder="Email" autocomplete="username">
-        <input class="field" id="liPass" type="password" style="width:100%" placeholder="Mot de passe" autocomplete="current-password">
-        <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="liveLogin()">Se connecter</button>
-        <div id="liErr" style="color:var(--red);font-size:12.5px;font-weight:800"></div>
+      <div class="login-form">
+        <label class="login-field">
+          <svg class="login-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h13A2.5 2.5 0 0 1 21 6.5v11A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5v-11Z"/><path d="m4 6.5 8 6 8-6"/></svg>
+          <input class="login-input" id="liEmail" placeholder="Email" autocomplete="username">
+        </label>
+        <label class="login-field">
+          <svg class="login-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>
+          <input class="login-input" id="liPass" type="password" placeholder="Mot de passe" autocomplete="current-password">
+        </label>
+        <button class="login-submit" onclick="liveLogin()">
+          <span>Se connecter</span>
+          <svg class="login-submit-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+        </button>
+        <div id="liErr" class="login-error"></div>
       </div>`;
   } else {
-    box.innerHTML='<div class="login-list">'+ACCOUNTS.filter(a=>a.active).map(a=>`
-      <button class="login-item" onclick="login('${a.id}')">
-        <div class="av" style="background:${AV_COLORS[a.role].bg};color:${AV_COLORS[a.role].fg}">${initials(a.name)}</div>
-        <div><b>${a.name}</b><span>${a.org} · ${a.email}</span></div>
-        <span class="login-role role-${a.role}">${a.role==='admin'?'Admin Valyn':'Client'}</span>
-      </button>`).join('')+'</div>';
+    if(instruct) instruct.textContent='Sélectionnez un profil de démonstration pour explorer la plateforme.';
+    if(footnote) footnote.textContent="Mode démonstration — aucun mot de passe n'est transmis.";
+    const groups=[];
+    ACCOUNTS.filter(a=>a.active).forEach(a=>{
+      let g=groups.find(g=>g.org===a.org);
+      if(!g){ g={org:a.org,items:[]}; groups.push(g); }
+      g.items.push(a);
+    });
+    box.innerHTML=groups.map(g=>`
+      <div class="login-group">
+        <div class="login-group-label">${esc(g.org)}</div>
+        <div class="login-list">
+          ${g.items.map(a=>`
+            <button class="login-item" onclick="login('${a.id}')">
+              <div class="av" style="background:${AV_COLORS[a.role].bg};color:${AV_COLORS[a.role].fg}">${initials(a.name)}</div>
+              <div><b>${esc(a.name)}</b><span>${esc(a.email)}</span></div>
+              <span class="login-role role-${a.role}">${a.role==='admin'?'Admin Valyn':'Client'}</span>
+            </button>`).join('')}
+        </div>
+      </div>`).join('');
   }
 }
 async function liveLogin(){
