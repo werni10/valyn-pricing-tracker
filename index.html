@@ -1387,6 +1387,21 @@ function transmittedPeriods(){
   const withData=new Set(dataPeriods());
   return CYCLE.filter(m=>m.org===org&&(m.status==='PUBLISHED'||m.status==='ARCHIVED')&&withData.has(m.period)).map(m=>m.period).sort();
 }
+// Alertes flash KPI: headline = every alert raised across the published months,
+// detail = the ones that appeared this month (a finition crossing the 8 % real
+// commercial discount threshold it was under in M-1). Mirrors the "N en <mois>"
+// reading of the reference dashboard.
+function alertsAllMonths(){
+  return transmittedPeriods().reduce((n,p)=>n+buildAlerts(p).length,0);
+}
+function newAlertsThisMonth(){
+  return scope(CURRENT).filter(v=>{
+    const c=vehMonth(v,CURRENT); if(!c||!c.e)return false;
+    const p=v.months[PREV]?vehMonth(v,PREV):null;
+    const was=p&&p.e?p.e.AB>0.08:false;
+    return c.e.AB>0.08 && !was;
+  }).length;
+}
 function renderKPI(){
   const sc = scope(CURRENT);
   const cemSeries = MONTHS.map(m=>{ const s=scope(m); return s.length? s.reduce((a,v)=>a+vehMonth(v,m).e.CEM,0)/s.length : null; });
@@ -1400,7 +1415,7 @@ function renderKPI(){
   const kpis = [
     {lab:'Rapports transmis', tip:'Nombre de mois d\'analyse publiés et consultables.', val:transmitted, trend:transmitted?`Dernier : ${MLABEL[CURRENT]||CURRENT}`:'Aucun encore', cls:'blue'},
     {lab:'Finitions analysées', tip:'Total des finitions présentes dans le périmètre, tous mois confondus.', val:totalFinitions, trend:`${sc.length} sur ${MLABEL[CURRENT]||CURRENT}`, cls:'blue', spark:cemSeries},
-    {lab:'Alertes flash', tip:'Signaux pricing / fiscaux générés automatiquement ce mois.', val:alerts.length, trend:`sur ${MLABEL[CURRENT]||CURRENT}`, cls:'amber'},
+    {lab:'Alertes flash', tip:'Total des signaux pricing / fiscaux détectés sur l\'ensemble des mois publiés. Le détail indique ceux apparus sur le mois en cours.', val:alertsAllMonths(), trend:`${newAlertsThisMonth()} nouvelle(s) sur ${MLABEL[CURRENT]||CURRENT}`, cls:'amber'},
     {lab:'Sélection '+(MLABEL[wp]||wp), tip:'Périmètre choisi pour l\'analyse du mois prochain.', val:selDone?selCount+' ✓':selCount+' choisie(s)', trend:selDone?'Sélection transmise':'À transmettre', cls:selDone?'green':'red'}
   ];
   destroyChart('kpiSparkCanvas');
@@ -1464,16 +1479,22 @@ function renderTopRemises(){
     return `<div class="bar-row"><label>${esc(r.v.modele)} ${esc(r.v.finition)}</label><div class="bar-bg"><div class="bar-fill" style="width:${w}%"></div></div><b>${fmtP(r.ab)}</b></div>`;
   }).join('');
 }
-function buildAlerts(){
+// period/prev default to the active month so existing callers are unchanged;
+// passing them explicitly lets the KPI total the alerts of every month.
+function buildAlerts(period,prev){
+  const M = period || CURRENT;
+  const M1 = prev || (M===CURRENT ? PREV : prevPeriod(M));
   const out = [];
-  scope(CURRENT).forEach(v=>{
-    const c = vehMonth(v,CURRENT), p = v.months[PREV]?vehMonth(v,PREV):null;
+  scope(M).forEach(v=>{
+    const c = vehMonth(v,M), p = v.months[M1]?vehMonth(v,M1):null;
     if(c.e.AB>0.08) out.push({ico:'!',cls:'red',t:`Remise commerciale élevée — ${esc(v.modele)} ${esc(v.finition)}`,p:`Effort commercial réel de ${fmtP(c.e.AB)} (> seuil 8 %). Pression concurrentielle probable sur le segment ${esc(v.segment)}.`,prio:'élevée'});
     if(p&&p.e){ const d=(c.e.CEM-p.e.CEM)/p.e.CEM; if(d<-0.03) out.push({ico:'▼',cls:'amber',t:`Baisse CEM significative — ${esc(v.modele)} ${esc(v.finition)}`,p:`Prix clé en main en recul de ${(d*100).toFixed(1)} % vs M-1 (${fmtK(p.e.CEM)} → ${fmtK(c.e.CEM)}).`,prio:'moyenne'}); }
     // approche palier taxe : remisé HT proche d'un seuil du barème
     const seuils=[400000,600000,800000,1000000];
     seuils.forEach(s=>{ if(v.type==='Thermique' && c.e.P>=s*0.97 && c.e.P<=s*1.03) out.push({ico:'₮',cls:'amber',t:`Effet palier fiscal — ${esc(v.modele)} ${esc(v.finition)}`,p:`Prix remisé HT (${fmt(c.e.P)}) proche du seuil ${fmt(s)} : une remise supplémentaire peut basculer la taxe de luxe.`,prio:'moyenne'}); });
-    if(!v.months[PREV]) out.push({ico:'+',cls:'blue',t:`Nouvelle finition — ${esc(v.modele)} ${esc(v.finition)}`,p:`Ajoutée au périmètre ce mois. À suivre sur les prochains cycles.`,prio:'suivi'});
+    // in the earliest month held there is no M-1 to compare against, so every
+    // finition would read as "nouvelle" — that's an artefact, not a signal
+    if(!v.months[M1] && M!==MONTHS[0]) out.push({ico:'+',cls:'blue',t:`Nouvelle finition — ${esc(v.modele)} ${esc(v.finition)}`,p:`Ajoutée au périmètre ce mois. À suivre sur les prochains cycles.`,prio:'suivi'});
     if(c.e.AA>0.05) out.push({ico:'◑',cls:'amber',t:`Remise fiscale dominante — ${esc(v.modele)} ${esc(v.finition)}`,p:`${fmtP(c.e.AA)} de la remise sert à optimiser la taxe de luxe (remise déguisée), pas un effort commercial réel.`,prio:'moyenne'});
   });
   return out;
